@@ -1,26 +1,33 @@
 import re
 
-#РџРµСЂРµС‡РёСЃР»РµРЅРёРµ РѕР±Р»Р°СЃС‚РµР№ С‚РµРіРѕРІ HTML.
+#Перечисление областей тегов HTML.
 TagsHTML = re.compile('<.*?>|&([a-z0-9]+|#[0-9]{1,6}|#x[0-9a-f]{1,6});')
 
-#РЈРґР°Р»СЏРµС‚ С‚РµРіРё HTML РёР· СЃС‚СЂРѕРєРё.
+#Удаляет теги HTML из строки.
 def RemoveHTML(TextHTML):
   CleanText = re.sub(TagsHTML, '', str(TextHTML))
   return str(CleanText)
 
-#РЈРґР°Р»СЏРµС‚ РёР· СЃС‚СЂРѕРєРё СЃРёРјРІРѕР»С‹: РЅРѕРІРѕР№ СЃС‚СЂРѕРєРё, С‚Р°Р±СѓР»СЏС†РёРё, РїСЂРѕР±РµР»С‹ РёР· РЅР°С‡Р°Р»Р° Рё РєРѕРЅС†Р°.
+#Удаляет из строки символы: новой строки, табуляции, пробелы из начала и конца.
 def RemoveSpaceSymbols(Text):
     Text = Text.replace('\n', '')
     Text = Text.replace('\t', '')
     Text = ' '.join(Text.split())
     return Text.strip()
 
-#Р—Р°РјРµРЅСЏРµС‚ СЃРёРјРІРѕР» РЅРѕРІРѕР№ СЃС‚СЂРѕРєРё РЅР° Р·Р°РїСЏС‚СѓСЋ СЃ РїСЂРѕР±РµР»РѕРј.
+#Заменяет символ новой строки на запятую с пробелом.
 def ReplaceEndlToComma(Text):
     Text = Text.strip()
     Text = Text.replace('\n', ', ')
     return Text
 
+#Преобразует литеральное число в int.
+def LiteralToInt(String):
+    if String.isdigit():
+        return int(String)
+    else:
+        Number = float(String[:-1]) * 1000
+    return int(Number)
 
 
 
@@ -42,31 +49,31 @@ def ReplaceEndlToComma(Text):
 
 
 
-#РџРѕР»СѓС‡Р°РµС‚ СЃС‚СЂРѕРєСѓ СЃ РєРѕР»РёС‡РµСЃС‚РІРѕРј Р·Р°РіСЂСѓР¶РµРЅРЅС‹С… РіР»Р°РІ.
+#Получает строку с количеством загруженных глав.
 def GetChaptersCount(Soup):
     Divs = Soup.find_all('div', {'class': 'media-info-list__value text-capitalize'})
     ChaptersCount = RemoveHTML(Divs[1])
     return ChaptersCount
 
-#РџРѕР»СѓС‡Р°РµС‚ СЃРїРёСЃРѕРє РЅР°Р·РІР°РЅРёР№ РѕС‚РѕР±СЂР°Р¶Р°РµРјС‹С… РіР»Р°РІ.
+#Получает список названий отображаемых глав.
 def GetCurrentChapters(Soup):
     BodyHTML = Browser.execute_script("return document.body.innerHTML;")
     Soup = BeautifulSoup(BodyHTML, "html.parser")
     ChaptersLinks = Soup.find_all('div', {'class': 'media-chapter__name text-truncate'})
     return ChaptersLinks
 
-#РЈРґР°Р»СЏРµС‚ РѕРґРёРЅР°РєРѕРІС‹Рµ СЃС‚СЂРѕРєРё РІ СЃРїРёСЃРєРµ.
+#Удаляет одинаковые строки в списке.
 def RemoveSameStrings(Array):
 
     return 0
 
-#РџР»Р°РІРЅР°СЏ РїСЂРѕРєСЂСѓС‚РєР° Рё РїРѕР»СѓС‡РµРЅРёРµ СЃРїРёСЃРєР° РіР»Р°РІ.
+#Плавная прокрутка и получение списка глав.
 def SmoothScrollAndGetChapters(ChaptersCount, Soup):
     CurrentChapter = 0
     CodeJS = "window.scrollTo(0, "
     CurrentChapters = GetCurrentChapters(Soup)
     while CurrentChapter < ChaptersCount * 40 + 100:
-        #РЎРѕРЅ РґР»СЏ РїРѕРґРіСЂСѓР·РєРё РіР»Р°РІ РІРѕ РІСЂРµРјСЏ РѕСЃС‚Р°РЅРѕРІРєРё СЃРєСЂРѕР»Р»Р°.
+        #Сон для подгрузки глав во время остановки скролла.
         if CurrentChapter % 1000 == 0:
             sleep(2);
             NewChapters = GetCurrentChapters(Soup)
@@ -78,10 +85,10 @@ def SmoothScrollAndGetChapters(ChaptersCount, Soup):
         Browser.execute_script(FullCodeJS)
         PreResult = []
         Result = []
-        #РџСЂРёРІРµРґРµРЅРёРµ Рє СЃС‚СЂРѕРєР°Рј.
+        #Приведение к строкам.
         for InObj in CurrentChapters:
             PreResult.append(str(InObj))
-        #РЈРґР°Р»РµРЅРёРµ РїРѕРІС‚РѕСЂРѕРІ.
+        #Удаление повторов.
         for InObj in PreResult:
             if InObj not in Result:
                 Result.append(InObj)
