@@ -9,27 +9,27 @@ from BaseFunctions import RemoveSpaceSymbols
 from BaseFunctions import ReplaceEndlToComma
 from BaseFunctions import LiteralToInt
 
-#Открывает панель для получения названий глав, ссылок на главы и слайдов.
+#РћС‚РєСЂС‹РІР°РµС‚ РїР°РЅРµР»СЊ РґР»СЏ РїРѕР»СѓС‡РµРЅРёСЏ РЅР°Р·РІР°РЅРёР№ РіР»Р°РІ, СЃСЃС‹Р»РѕРє РЅР° РіР»Р°РІС‹ Рё СЃР»Р°Р№РґРѕРІ.
 def PrepareToParcingChapter(Browser):
-    #Ожидание полной подгрузки страницы.
+    #РћР¶РёРґР°РЅРёРµ РїРѕР»РЅРѕР№ РїРѕРґРіСЂСѓР·РєРё СЃС‚СЂР°РЅРёС†С‹.
     Wait = WebDriverWait(Browser, 500)
     Wait.until(EC.visibility_of_element_located((By.CLASS_NAME, "media-chapter__name")))
 
-    #Получение ссылки на последнюю главу.
+    #РџРѕР»СѓС‡РµРЅРёРµ СЃСЃС‹Р»РєРё РЅР° РїРѕСЃР»РµРґРЅСЋСЋ РіР»Р°РІСѓ.
     BodyHTML = Browser.execute_script("return document.body.innerHTML;")
     Soup = BeautifulSoup(BodyHTML, "html.parser")
     LastChapter = Soup.find_all('div', {'class': 'media-chapter__name text-truncate'})[0]
     Soup = BeautifulSoup(str(LastChapter), "html.parser")
     LastChapter = Soup.find('a')
 
-    #Переход к последней главе и отключение уведомлений.
+    #РџРµСЂРµС…РѕРґ Рє РїРѕСЃР»РµРґРЅРµР№ РіР»Р°РІРµ Рё РѕС‚РєР»СЋС‡РµРЅРёРµ СѓРІРµРґРѕРјР»РµРЅРёР№.
     Browser.get("https://mangalib.me" + LastChapter['href'])
     Wait.until(EC.visibility_of_element_located((By.CLASS_NAME, "control__text")))
     Browser.find_element(By.CLASS_NAME, 'control__text').click()
     Browser.find_element(By.CLASS_NAME, 'reader-caution-continue').click()
     Browser.find_elements(By.CLASS_NAME, 'reader-header-action__text')[1].click()
 
-#Получение списка названий глав.
+#РџРѕР»СѓС‡РµРЅРёРµ СЃРїРёСЃРєР° РЅР°Р·РІР°РЅРёР№ РіР»Р°РІ.
 def GetChaptesNames(Browser):
     BodyHTML = Browser.execute_script("return document.body.innerHTML;")
     Soup = BeautifulSoup(BodyHTML, "html.parser")
@@ -41,7 +41,7 @@ def GetChaptesNames(Browser):
     Bufer = []
     return ChaptersNames
 
-#Получение списка ссылок на главы.
+#РџРѕР»СѓС‡РµРЅРёРµ СЃРїРёСЃРєР° СЃСЃС‹Р»РѕРє РЅР° РіР»Р°РІС‹.
 def GetChaptesLinks(Browser):
     BodyHTML = Browser.execute_script("return document.body.innerHTML;")
     Soup = BeautifulSoup(BodyHTML, "html.parser")
@@ -53,7 +53,7 @@ def GetChaptesLinks(Browser):
     Bufer = []
     return ChaptersLinks
 
-#Получение списка ссылок на слайды манги. Принимает подстроку с относительным URL главы.
+#РџРѕР»СѓС‡РµРЅРёРµ СЃРїРёСЃРєР° СЃСЃС‹Р»РѕРє РЅР° СЃР»Р°Р№РґС‹ РјР°РЅРіРё. РџСЂРёРЅРёРјР°РµС‚ РїРѕРґСЃС‚СЂРѕРєСѓ СЃ РѕС‚РЅРѕСЃРёС‚РµР»СЊРЅС‹Рј URL РіР»Р°РІС‹.
 def GetMangaSlidesUrlArray(Browser, ChapterLink):
     Browser.get("https://mangalib.me" + ChapterLink)
     BodyHTML = Browser.execute_script("return document.body.innerHTML;")
@@ -62,7 +62,7 @@ def GetMangaSlidesUrlArray(Browser, ChapterLink):
     FramesCount = RemoveHTML(list(FramesCount)[-1])
     FramesCount = FramesCount.split()[-1]
 
-    #Получение ссылок на кадры главы.
+    #РџРѕР»СѓС‡РµРЅРёРµ СЃСЃС‹Р»РѕРє РЅР° РєР°РґСЂС‹ РіР»Р°РІС‹.
     for i in range(int(FramesCount) - 1):
         Browser.find_element(By.CLASS_NAME, 'reader-view__container').click()
         sleep(1)
@@ -75,7 +75,7 @@ def GetMangaSlidesUrlArray(Browser, ChapterLink):
         FrameLinks.append(FramesLinksArray[i]['src'])
     return FrameLinks
 
-#Получение данных о манге и их сохранение в JSON.
+#РџРѕР»СѓС‡РµРЅРёРµ РґР°РЅРЅС‹С… Рѕ РјР°РЅРіРµ Рё РёС… СЃРѕС…СЂР°РЅРµРЅРёРµ РІ JSON.
 def GetMangaData(Browser, MangaName):
     Browser.get("https://mangalib.me/" + MangaName + "?section=info")
     BodyHTML = Browser.execute_script("return document.body.innerHTML;")
