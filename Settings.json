@@ -1,6 +1,8 @@
 {
-    "chrome-binary" : "",
-    "data-path" : "manga/",
-    "parcer-target" : "martial-peak",
-    "only-update" : true
+    "save-directory" : "",
+    "scan-target" : "",
+    "disable-age-limit-warning": true,
+    "sign-in": false,
+    "email": "",
+    "password": ""
 }
