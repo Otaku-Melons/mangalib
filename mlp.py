@@ -1,4 +1,5 @@
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver import Chrome
 
@@ -10,6 +11,7 @@ import sys
 from BaseFunctions import DisableAgeLimitWarning
 from BaseFunctions import PrintProgress
 from BaseFunctions import LogIn
+from BaseFunctions import Cls
 
 from Components import ParceTitle
 from Components import ScanTitles
@@ -21,7 +23,10 @@ LogFilename = LogFilename.replace(':', '-')
 logging.basicConfig(filename = LogFilename, level = logging.INFO)
 
 #Открытие браузера.
-Browser = Chrome(service = Service(ChromeDriverManager().install()))
+BrowserOptions = Options()
+BrowserOptions.add_argument("--log-level=3")
+Browser = Chrome(service = Service(ChromeDriverManager().install()), options = BrowserOptions)
+Cls()
 Browser.set_window_size(1920, 1080)
 Browser.implicitly_wait(10)
 
@@ -71,12 +76,12 @@ if len(sys.argv) > 2:
 					PrintProgress("Parcing titles from manifest:", str(i + 1), str(len(MangaList)))
 					MangaName = MangaList[i]
 					logging.info("Parcing: \"" + MangaName + "\". Starting...")
-					ParceTitle(Browser, MangaName, Settings)
+					ParceTitle(Browser, MangaName, Settings, ShowProgress = False)
 		#Парсинг одного тайтла.
 		else:
 			MangaName = sys.argv[2]
 			logging.info("Parcing: \"" + MangaName + "\". Starting...")
-			ParceTitle(Browser, MangaName, Settings)
+			ParceTitle(Browser, MangaName, Settings, ShowProgress = True)
 
 #Поиск данных о манге методом перелистывания ID.
 if "scan" in sys.argv:

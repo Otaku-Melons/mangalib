@@ -153,9 +153,8 @@ def GetChaptersLinks(Browser):
 	
 	return ChaptersLinks
 
-#Получение списка ссылок на слайды манги. Принимает подстроку с относительным URL главы.
-def GetMangaSlidesUrlArray(Browser, MangaName, ChapterLink):
-	logging.info("Parcing: \"" + MangaName + "\". Chapter: \"" + ChapterLink + "\".")
+#Получение списка ссылок на слайды манги.
+def GetMangaSlidesUrlArray(Browser, ChapterLink, Settings):
 	Browser.get("https://mangalib.me" + ChapterLink)
 	Wait = WebDriverWait(Browser, 500)
 	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
@@ -165,7 +164,7 @@ def GetMangaSlidesUrlArray(Browser, MangaName, ChapterLink):
 	FramesCount = FramesCount.split()[-1]
 
 	#Получение ссылок на кадры главы.
-	for i in range(int(FramesCount) - 1):
+	for i in range(0, int(FramesCount) - 1):
 		#Проверка полной загрузки всех <img> на странице.
 		while Browser.execute_script('''
         for (var img of document.getElementsByTagName("img")) {
@@ -175,14 +174,20 @@ def GetMangaSlidesUrlArray(Browser, MangaName, ChapterLink):
 		''') == False:
 			sleep(1)
 		Browser.find_element(By.CLASS_NAME, 'reader-view__container').click()
+		sleep(Settings["slide-interval"])
 
 	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
 	Soup = BeautifulSoup(BodyHTML, "lxml")
 	SmallSoup = BeautifulSoup(str(Soup.find('div', {'class': 'reader-view__container'})), "html.parser")
-	FramesLinksArray = SmallSoup.find_all('img')
+	FramesLinksArray = SmallSoup.find_all('img', {"src": True})
 	FrameLinks = []
 	for i in range(len(FramesLinksArray)):
 		FrameLinks.append(FramesLinksArray[i]['src'])
+	logging.info("Chapter: \"" + ChapterLink + "\" parced. Slides count: " + str(len(FramesLinksArray)) + ".")
+
+	#Проверка ошибки: получен URL не всех слайдов.
+	if len(FramesLinksArray) != int(FramesCount):
+		logging.error("Chapter: \"" + ChapterLink + "\" parced with errors. Not all slides were received!")
 
 	FrameHeights = []
 	FrameWidths = []
@@ -397,7 +402,7 @@ def GetMangaData(Browser, MangaName):
 	return JSON
 
 #Возвращает структуру контента для помещения в JSON.
-def MakeContentData(BranchID, ChaptersNames, ChaptersLinks, BID, Browser, MangaName):
+def MakeContentData(BranchID, ChaptersNames, ChaptersLinks, BID, Browser, Settings, ShowProgress):
 	ChaptersNames.reverse()
 	ChaptersLinks.reverse()
 	ContentDataBranch = []
@@ -419,6 +424,11 @@ def MakeContentData(BranchID, ChaptersNames, ChaptersLinks, BID, Browser, MangaN
 		"volume_id": None,
 		"slides": []
 		}
+	IsBID = ""
+	if BID == "":
+		IsBID = "none"
+	else:
+		IsBID = BID.split('=')[-1]
 
 	for i in range(0, len(ChaptersNames)):
 		ChapterDataBufer = dict(ChapterData)
@@ -431,7 +441,9 @@ def MakeContentData(BranchID, ChaptersNames, ChaptersLinks, BID, Browser, MangaN
 		else:
 			ChapterDataBufer["name"] = ""
 		ChapterDataBufer["index"] = i + 1
-		ChapterDataBufer["slides"] = GetMangaSlidesUrlArray(Browser, MangaName, ChaptersLinks[i] + BID)
+		if ShowProgress == True:
+			PrintProgress("Branch ID: " + IsBID + ". Parcing chapters: ", str(i + 1), str(len(ChaptersLinks)))
+		ChapterDataBufer["slides"] = GetMangaSlidesUrlArray(Browser, ChaptersLinks[i] + BID, Settings)
 
 		ContentDataBranch.append(ChapterDataBufer)
 

@@ -4,5 +4,6 @@
     "disable-age-limit-warning": true,
     "sign-in": false,
     "email": "",
-    "password": ""
+    "password": "",
+    "slide-interval": 5
 }

@@ -12,7 +12,7 @@ from BaseFunctions import GetMangaData
 from BaseFunctions import MakeContentData
 
 #Парсинг одного тайтла.
-def ParceTitle(Browser, MangaName, Settings):
+def ParceTitle(Browser, MangaName, Settings, ShowProgress):
 	#Получение данных о манге.
 	JSON = GetMangaData(Browser, MangaName)
 	BranchesCount = len(JSON["branches"])
@@ -37,7 +37,7 @@ def ParceTitle(Browser, MangaName, Settings):
 			ChaptersNames = GetChaptersNames(Browser)
 			ChaptersLinks = GetChaptersLinks(Browser)
 			logging.info("Parcing: \"" + MangaName + "\". Branch ID: " + BIDlog + ". Chapters in branch: " + str(len(ChaptersLinks)) + ".")
-			JSON["content"][str(i + 1)] = MakeContentData(i + 1, ChaptersNames, ChaptersLinks, BID, Browser, MangaName)
+			JSON["content"][str(i + 1)] = MakeContentData(i + 1, ChaptersNames, ChaptersLinks, BID, Browser, Settings, ShowProgress)
 	else:
 		 #Если лицензировано, ничего больше не парсить и вывести уведомление.
 		 logging.info("Parcing: \"" + MangaName + "\". Licensed. Skipped.")
