@@ -96,7 +96,7 @@ def GetChapterSlidesInJSON(Browser, ChapterURL, Settings):
 	ChapterURL = ChapterURL.split('?')[0]
 	SlidesInfo = GetMangaSlidesUrlArray(Browser, ChapterURL, Settings)
 
-	with open(Settings["save-directory"] + "\\#ChapterSlides.json", "w", encoding = "utf-8") as FileWrite:
+	with open(Settings["save-directory"] + "\\#Slides.json", "w", encoding = "utf-8") as FileWrite:
 		json.dump(SlidesInfo, FileWrite, ensure_ascii = False, indent = 2, separators = (',', ': '))
 		logging.info("Chapter slides info file was created SUCCESSFULL!!!")
 
