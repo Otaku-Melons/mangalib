@@ -2,7 +2,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 from bs4 import BeautifulSoup
+from sys import platform
 from time import sleep
+
+import hashlib
 
 import logging
 import re
@@ -14,6 +17,13 @@ import os
 
 #Перечисление областей тегов HTML.
 TagsHTML = re.compile('<.*?>|&([a-z0-9]+|#[0-9]{1,6}|#x[0-9a-f]{1,6});')
+
+#Выключает компьютер: работает на Windows и Linux.
+def Shutdown():
+	if platform == "linux" or platform == "linux2":
+		os.system('sudo shutdown now')
+	elif platform == "win32":
+		os.system("shutdown /s")
 
 #Удаляет теги HTML из строки.
 def RemoveHTML(TextHTML):
@@ -41,6 +51,52 @@ def LiteralToInt(String):
         Number = float(String[:-1]) * 1000
     return int(Number)
 
+#Очищает консоль.
+def Cls():
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+#Выводит прогресс процесса.
+def PrintProgress(String, Current, Total):
+	Cls()
+	print(String, " ", Current, " / ", Total)
+
+#==========================================================================================#
+#=== ПАРСИНГ ГЛАВ ===#
+#==========================================================================================#
+
+#Возвращает результат проверки: платный ли тайтл.
+def IsMangaPaid(Browser, MangaName):
+	#Проверка нахождения на нужной странице.
+	URLinfo = "https://mangalib.me/" + MangaName + "?section=info"
+	if Browser.current_url != URLinfo:
+		Browser.get(URLinfo)
+
+	#Поиск иконки покупки.
+	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
+	Soup = BeautifulSoup(BodyHTML, "lxml")
+	if Soup.find_all('i', {'class': 'fa fa-shopping-cart mr-5'}) == []:
+		return False
+	else:
+		return True
+
+#Возвращает уникальный BranchID на основе названия манги.
+def GetCodeBID(MangaName, StrBID):
+		MangaIntName = hashlib.md5(MangaName.encode())
+		MangaIntName = MangaIntName.hexdigest()
+		return str(int(MangaIntName, 16)) + StrBID
+
+#Вход на сайт.
+def LogIn(Browser, Settings):
+	Browser.get("https://lib.social/login?from=https%3A%2F%2Fmangalib.me")
+
+	EmailInput = Browser.find_element(By.CSS_SELECTOR , "input[name=\"email\"]")
+	PasswordInput = Browser.find_element(By.CSS_SELECTOR , "input[name=\"password\"]")
+
+	EmailInput.send_keys(Settings["email"])
+	PasswordInput.send_keys(Settings["password"])
+
+	Browser.find_element(By.CLASS_NAME, "button_primary").click()
+
 #Возвращает контейнер с данными о переводчике для записи в JSON.
 def GetPublisherData(Div):
     Soup = BeautifulSoup(str(Div), "lxml")
@@ -57,31 +113,6 @@ def GetPublisherData(Div):
     Bufer['tagline'] = ''
     Bufer['type'] = 'Переводчик'
     return Bufer
-
-#Очищает консоль.
-def Cls():
-    os.system('cls' if os.name == 'nt' else 'clear')
-
-#Выводит прогресс процесса.
-def PrintProgress(String, Current, Total):
-	Cls()
-	print(String, " ", Current, " / ", Total)
-
-#==========================================================================================#
-#=== ПАРСИНГ ГЛАВ ===#
-#==========================================================================================#
-
-#Вход на сайт.
-def LogIn(Browser, Settings):
-	Browser.get("https://lib.social/login?from=https%3A%2F%2Fmangalib.me")
-
-	EmailInput = Browser.find_element(By.CSS_SELECTOR , "input[name=\"email\"]")
-	PasswordInput = Browser.find_element(By.CSS_SELECTOR , "input[name=\"password\"]")
-
-	EmailInput.send_keys(Settings["email"])
-	PasswordInput.send_keys(Settings["password"])
-
-	Browser.find_element(By.CLASS_NAME, "button_primary").click()
 
 #Отключить уведомление о возрастном ограничении.
 def DisableAgeLimitWarning(Browser):
@@ -156,7 +187,6 @@ def GetChaptersLinks(Browser):
 #Получение списка ссылок на слайды манги.
 def GetMangaSlidesUrlArray(Browser, ChapterLink, Settings):
 	Browser.get("https://mangalib.me" + ChapterLink)
-	Wait = WebDriverWait(Browser, 500)
 	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
 	Soup = BeautifulSoup(BodyHTML, "lxml")
 	FramesCount = Soup.find('select', {'id': 'reader-pages'})
@@ -173,7 +203,9 @@ def GetMangaSlidesUrlArray(Browser, ChapterLink, Settings):
         return true;    
 		''') == False:
 			sleep(1)
+		#Нажатие на слайд для перехода к следующему.
 		Browser.find_element(By.CLASS_NAME, 'reader-view__container').click()
+		#Пауза между перелистыванием для снижения нагрузки на сервер.
 		sleep(Settings["slide-interval"])
 
 	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
@@ -183,11 +215,12 @@ def GetMangaSlidesUrlArray(Browser, ChapterLink, Settings):
 	FrameLinks = []
 	for i in range(len(FramesLinksArray)):
 		FrameLinks.append(FramesLinksArray[i]['src'])
-	logging.info("Chapter: \"" + ChapterLink + "\" parced. Slides count: " + str(len(FramesLinksArray)) + ".")
 
 	#Проверка ошибки: получен URL не всех слайдов.
 	if len(FramesLinksArray) != int(FramesCount):
-		logging.error("Chapter: \"" + ChapterLink + "\" parced with errors. Not all slides were received!")
+		logging.warning("Chapter: \"" + ChapterLink + "\" parced with errors. Not all slides were received: " + str(len(FramesLinksArray)) + " / " + FramesCount + ".")
+	else:
+		logging.info("Chapter: \"" + ChapterLink + "\" parced. Slides count: " + str(len(FramesLinksArray)) + ".")
 
 	FrameHeights = []
 	FrameWidths = []
@@ -308,7 +341,7 @@ def GetMangaData(Browser, MangaName):
 	for InObj in BranchesCount:
 		BranchIndex += 1
 		InBranch = {}
-		InBranch['id'] = BranchIndex
+		InBranch['id'] = ""
 		SmallSoup = BeautifulSoup(str(InObj), "lxml")
 		InBranch['img'] = SmallSoup.find('div', {'class': 'team-list-item__cover'})['style'].split('(')[-1].split(')')[0]
 		InBranch['img'] = 'https://mangalib.me' + InBranch['img'].replace('"', '')
@@ -328,7 +361,7 @@ def GetMangaData(Browser, MangaName):
 	#Если нет веток перевода, то создать пустой шаблон.
 	if len(Branches) == 0:
 		InBranch = {}
-		InBranch['id'] = 1
+		InBranch['id'] = GetCodeBID(MangaName, "")
 		InBranch['img'] = ""
 		InBranch['publishers'] = Publishers
 		InBranch['subscribed'] = False
@@ -348,10 +381,6 @@ def GetMangaData(Browser, MangaName):
 	IsYaoi = False
 	if "яой" in GenresArray:
 		IsYaoi = True
-
-
-
-
 	
 	JSON = { 
 		"id" : 0, 
@@ -402,7 +431,7 @@ def GetMangaData(Browser, MangaName):
 	return JSON
 
 #Возвращает структуру контента для помещения в JSON.
-def MakeContentData(BranchID, ChaptersNames, ChaptersLinks, BID, Browser, Settings, ShowProgress):
+def MakeContentData(ChaptersNames, ChaptersLinks, BID, Browser, Settings, ShowProgress):
 	ChaptersNames.reverse()
 	ChaptersLinks.reverse()
 	ContentDataBranch = []
@@ -437,12 +466,11 @@ def MakeContentData(BranchID, ChaptersNames, ChaptersLinks, BID, Browser, Settin
 		ChapterDataBufer["tome"] = ChapterNameData[1]
 		ChapterDataBufer["chapter"] = ChapterNameData[3]
 		if len(ChapterNameData) > 4:
-			ChapterDataBufer["name"] = ChapterNameData[5]
+			ChapterDataBufer["name"] = RemoveSpaceSymbols(ChaptersNames[i].split('-')[-1])
 		else:
 			ChapterDataBufer["name"] = ""
 		ChapterDataBufer["index"] = i + 1
-		if ShowProgress == True:
-			PrintProgress("Branch ID: " + IsBID + ". Parcing chapters: ", str(i + 1), str(len(ChaptersLinks)))
+		PrintProgress(ShowProgress + "Branch ID: " + IsBID + ". Parcing chapters: ", str(i + 1), str(len(ChaptersLinks)))
 		ChapterDataBufer["slides"] = GetMangaSlidesUrlArray(Browser, ChaptersLinks[i] + BID, Settings)
 
 		ContentDataBranch.append(ChapterDataBufer)
