@@ -66,8 +66,10 @@ def PrintProgress(String, Current, Total):
 
 #Возвращает результат проверки: платный ли тайтл.
 def IsMangaPaid(Browser, MangaName):
+def IsMangaPaid(Browser, MangaName, Settings):
 	#Проверка нахождения на нужной странице.
 	URLinfo = "https://mangalib.me/" + MangaName + "?section=info"
+	URLinfo = Settings["domain"] + MangaName + "?section=info"
 	if Browser.current_url != URLinfo:
 		Browser.get(URLinfo)
 
@@ -88,6 +90,7 @@ def GetCodeBID(MangaName, StrBID):
 #Вход на сайт.
 def LogIn(Browser, Settings):
 	Browser.get("https://lib.social/login?from=https%3A%2F%2Fmangalib.me")
+	Browser.get("https://lib.social/login?from=https%3A%2F%2F" + Settings["domain"].replace("https://", "").replace(".me/", "") + ".me")
 
 	EmailInput = Browser.find_element(By.CSS_SELECTOR , "input[name=\"email\"]")
 	PasswordInput = Browser.find_element(By.CSS_SELECTOR , "input[name=\"password\"]")
@@ -99,6 +102,7 @@ def LogIn(Browser, Settings):
 
 #Возвращает контейнер с данными о переводчике для записи в JSON.
 def GetPublisherData(Div):
+def GetPublisherData(Div, Domain):
     Soup = BeautifulSoup(str(Div), "lxml")
     Bufer = {}
     Bufer['id'] = 0
@@ -110,6 +114,7 @@ def GetPublisherData(Div):
     else:
         Bufer['dir'] = Soup.find('a')['href'].split('/')[-1]
         Bufer['img'] = "https://mangalib.me" + Bufer['img']
+        Bufer['img'] = Domain[:-1] + Bufer['img']
     Bufer['tagline'] = ''
     Bufer['type'] = 'Переводчик'
     return Bufer
@@ -119,6 +124,15 @@ def DisableAgeLimitWarning(Browser):
 	Browser.get("https://mangalib.me/kimetsu-no-yaiba/v1/c1?page=1")
 
 	Browser.find_element(By.CLASS_NAME, "control__text").click()
+def DisableAgeLimitWarning(Browser, Settings):
+	if Settings["domain"] == "https://mangalib.me/":
+		Browser.get("https://mangalib.me/kimetsu-no-yaiba/v1/c1?page=1")
+	elif Settings["domain"] == "https://hentailib.me/": 
+		Browser.get("https://hentailib.me/oh-sheet-shadman/v1/c1?page=1")
+	elif Settings["domain"] == "https://yaoilib.me/": 
+		Browser.get("https://yaoilib.me/you-are-here/v1/c151?page=1")
+
+	Browser.find_elements(By.CLASS_NAME, "control__text")[-1].click()
 	Browser.find_element(By.CLASS_NAME, 'reader-caution-continue').click()
 
 #Получает bid веток перевода.
@@ -134,13 +148,25 @@ def GetBID(Browser, MangaName, BranchesIndex):
 	BID = []
 	BID = range(FirstBID, FirstBID + BranchesIndex)
 	return list(BID)
+def GetBID(Browser, MangaName, Settings):
+	Browser.get(Settings["domain"] + MangaName + "?section=chapters")
+	TranslateBranches = Browser.find_elements(By.CLASS_NAME, "team-list-item")
+	BIDs = list()
+	for InObj in TranslateBranches:
+		if InObj.is_displayed() and InObj.is_enabled():
+			InObj.click()
+			BIDs.append(str(Browser.current_url).split('?')[-1].split('&')[0].split('=')[1])
+	return BIDs
 
 #Открывает панель для получения названий глав, ссылок на главы и слайдов
 def PrepareToParcingChapter(Browser, MangaName, AgeLimit, BID):
+def PrepareToParcingChapter(Browser, MangaName, Settings, BID):
 	if BID is None:
 		Browser.get("https://mangalib.me/" + MangaName + "?section=chapters")
+		Browser.get(Settings["domain"] + MangaName + "?section=chapters")
 	else:
 		Browser.get("https://mangalib.me/" + MangaName + "?bid=" + str(BID) + "&section=chapters")
+		Browser.get(Settings["domain"] + MangaName + "?bid=" + str(BID) + "&section=chapters")
 	#Ожидание полной подгрузки страницы.
 	Wait = WebDriverWait(Browser, 500)
 	Wait.until(EC.visibility_of_element_located((By.CLASS_NAME, "media-chapter__name")))
@@ -154,6 +180,7 @@ def PrepareToParcingChapter(Browser, MangaName, AgeLimit, BID):
 
 	#Переход к последней главе.
 	Browser.get("https://mangalib.me" + LastChapter['href'])
+	Browser.get(Settings["domain"][:-1] + LastChapter['href'])
 	Browser.find_elements(By.CLASS_NAME, 'reader-header-action__text')[1].click()
 	
 #Получение списка названий глав.
@@ -187,11 +214,15 @@ def GetChaptersLinks(Browser):
 #Получение списка ссылок на слайды манги.
 def GetMangaSlidesUrlArray(Browser, ChapterLink, Settings):
 	Browser.get("https://mangalib.me" + ChapterLink)
+	Browser.get(Settings["domain"][:-1] + ChapterLink)
 	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
 	Soup = BeautifulSoup(BodyHTML, "lxml")
+	WebDriverWait(Browser, 60).until(EC.presence_of_element_located, ((By.ID , "reader-pages")))
 	FramesCount = Soup.find('select', {'id': 'reader-pages'})
 	FramesCount = RemoveHTML(list(FramesCount)[-1])
+	FramesCount = RemoveHTML(FramesCount)
 	FramesCount = FramesCount.split()[-1]
+	sleep(Settings["slide-interval"])
 
 	#Получение ссылок на кадры главы.
 	for i in range(0, int(FramesCount) - 1):
@@ -252,6 +283,8 @@ def GetMangaSlidesUrlArray(Browser, ChapterLink, Settings):
 #Получение данных о манге и их сохранение в JSON.
 def GetMangaData(Browser, MangaName):
 	Browser.get("https://mangalib.me/" + MangaName + "?section=info")
+def GetMangaData(Browser, MangaName, Settings):
+	Browser.get(Settings["domain"] + MangaName + "?section=info")
 	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
 	Soup = BeautifulSoup(BodyHTML, "lxml")
 	SmallSoup = BeautifulSoup(str(Soup.find('div', {'class': 'media-sidebar__cover paper'})), "html.parser")
@@ -331,9 +364,11 @@ def GetMangaData(Browser, MangaName):
 	else:
 		for InObj in PrePublishers:
 			Publishers.append(GetPublisherData(InObj))
+			Publishers.append(GetPublisherData(InObj, Settings["domain"]))
 	
 	Branches = []
 	Browser.get("https://mangalib.me/" + MangaName + "?section=chapters")
+	Browser.get(Settings["domain"] + MangaName + "?section=chapters")
 	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
 	Soup = BeautifulSoup(BodyHTML, "lxml")
 	BranchesCount = Soup.find_all('div', {'class': 'team-list-item'})

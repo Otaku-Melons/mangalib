@@ -1,4 +1,5 @@
 {
+    "domain": "mangalib",
     "save-directory" : "",
     "scan-target" : "",
     "disable-age-limit-warning": true,

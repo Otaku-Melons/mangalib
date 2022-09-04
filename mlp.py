@@ -50,6 +50,9 @@ with open("Settings.json") as FileRead:
 				logging.info("Save directory set as default.")
 			else:
 				logging.info("Save directory set as " + Settings["save-directory"] + ".")
+			#Преобразование названия домена в URL целевого сайта.
+			Settings["domain"] = "https://" + Settings["domain"] + ".me/"
+			logging.info("Domain set as \"" + Settings["domain"] + "\".")
 
 #Обработка аргументов.
 if len(sys.argv) > 2:
@@ -73,6 +76,7 @@ if len(sys.argv) > 2:
 				else:
 					#Проверка директории сохранения данных.
 					logging.info("Manifest successfully was loaded. Titles descripted:" + str(len(MangaList)) + ".")
+					logging.info("Manifest successfully was loaded. Titles: " + str(len(MangaList)) + ".")
 				for i in range(0, len(MangaList)):
 					MangaName = MangaList[i]
 					logging.info("Parcing: \"" + MangaName + "\". Starting...")
