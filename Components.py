@@ -28,21 +28,12 @@ def SignInAndDisableWarning(Browser, Settings):
 			logging.error("Uncorrect user data! Check \"Settings.json\".")
 
 	if Settings["disable-age-limit-warning"] == True:
-		DisableAgeLimitWarning(Browser)
 		DisableAgeLimitWarning(Browser, Settings)
 		logging.info("Age limit warning disabled.")
-		if Settings["sign-in"] == True:
-			if Settings["email"] != "" and Settings["password"] != "":
-				LogIn(Browser, Settings)
-				logging.info("Sign in as \"" + Settings["email"] + "\".")
-			else:
-				logging.error("Uncorrect user data! Check \"Settings.json\".")
 
 #Парсинг одного тайтла.
 def ParceTitle(Browser, MangaName, Settings, ShowProgress):
 	#Получение данных о манге.
-	JSON = GetMangaData(Browser, MangaName)
-	IsPaid = IsMangaPaid(Browser, MangaName)
 	JSON = GetMangaData(Browser, MangaName, Settings)
 	IsPaid = IsMangaPaid(Browser, MangaName, Settings)
 	BranchesCount = len(JSON["branches"])
@@ -52,7 +43,6 @@ def ParceTitle(Browser, MangaName, Settings, ShowProgress):
 		#Получение BID веток.
 		BIDs = None
 		if BranchesCount > 1:
-			BIDs = GetBID(Browser, MangaName, BranchesCount)
 			BIDs = GetBID(Browser, MangaName, Settings)
 		logging.info("Parcing: \"" + MangaName + "\". Branches count: " + str(BranchesCount) + ".")
 		#Если не лицензировано, парсить каждую ветку.
@@ -60,13 +50,11 @@ def ParceTitle(Browser, MangaName, Settings, ShowProgress):
 			BID = ""
 			BIDlog = "none"
 			if BIDs is None:
-				PrepareToParcingChapter(Browser, MangaName, JSON['age_limit'], BIDs)
 				PrepareToParcingChapter(Browser, MangaName, Settings, BIDs)
 			else:
 				#Перезапись ID ветви с использованием BID, если ветвей много.
 				JSON["branches"][i]["id"] = GetCodeBID(MangaName, str(BIDs[i]))
 
-				PrepareToParcingChapter(Browser, MangaName, JSON['age_limit'], BIDs[i])
 				PrepareToParcingChapter(Browser, MangaName, Settings, BIDs[i])
 				BID = "?bid=" + str(BIDs[i])
 				BIDlog = str(BIDs[i])
@@ -103,18 +91,15 @@ def ScanTitles(Browser, Settings):
 		json.dump(TitlesAliasArray, FileWrite, ensure_ascii = False, indent = 2, separators = (',', ': '))
 		logging.info("Manifest file was created. Scanning SUCCESSFULL!!!")
 
-#Парсинг одной главы. Помогает исправлять записи с отсутствующими слайдами.
 #Получение данных о слайдах одной главы и запись в JSON. Помогает исправлять записи с отсутствующими слайдами.
 def GetChapterSlidesInJSON(Browser, ChapterURL, Settings):
-	ChapterURL = ChapterURL.replace("https://mangalib.me", "")
 	ChapterURL = ChapterURL.replace(Settings["domain"][:-1], "")
 	ChapterURL = ChapterURL.split('?')[0]
+	print(ChapterURL)
 	SlidesInfo = GetMangaSlidesUrlArray(Browser, ChapterURL, Settings)
 
-	with open(Settings["save-directory"] + "\\#ChapterSlides.json", "w", encoding = "utf-8") as FileWrite:
 	with open(Settings["save-directory"] + "\\#Slides.json", "w", encoding = "utf-8") as FileWrite:
 		json.dump(SlidesInfo, FileWrite, ensure_ascii = False, indent = 2, separators = (',', ': '))
-		logging.info("Chapter slides info file was created SUCCESSFULL!!!")
 		logging.info("Chapter slides info file was created. SUCCESSFULL!!!")
 
 

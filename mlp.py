@@ -75,7 +75,6 @@ if len(sys.argv) > 2:
 					logging.error("The manifest could not be opened.")
 				else:
 					#Проверка директории сохранения данных.
-					logging.info("Manifest successfully was loaded. Titles descripted:" + str(len(MangaList)) + ".")
 					logging.info("Manifest successfully was loaded. Titles: " + str(len(MangaList)) + ".")
 				for i in range(0, len(MangaList)):
 					MangaName = MangaList[i]

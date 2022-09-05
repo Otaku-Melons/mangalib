@@ -1,10 +1,10 @@
 {
-    "domain": "mangalib",
+    "domain": "hentailib",
     "save-directory" : "",
     "scan-target" : "",
     "disable-age-limit-warning": true,
-    "sign-in": false,
-    "email": "",
-    "password": "",
+    "sign-in": true,
+    "email": "nafomin14@gmail.com",
+    "password": "mango343",
     "slide-interval": 5
 }
