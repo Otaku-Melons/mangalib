@@ -1,3 +1,4 @@
+from operator import truediv
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
@@ -60,6 +61,10 @@ def PrintProgress(String, Current, Total):
 	Cls()
 	print(String, " ", Current, " / ", Total)
 
+#Удаляет аргументы из URL.
+def RemoveArgumentsFromURL(URL):
+	return str(URL).split('?')[0]
+
 #==========================================================================================#
 #=== ПАРСИНГ ГЛАВ ===#
 #==========================================================================================#
@@ -78,6 +83,13 @@ def IsMangaPaid(Browser, MangaName, Settings):
 		return False
 	else:
 		return True
+
+#Получает ID главы на сайте.
+def GetChapterID(Browser, ChapterLink, Settings, GoToPage):
+	if GoToPage == True:
+		Browser.get(Settings["domain"][:-1] + ChapterLink)
+	SiteWindowData = Browser.execute_script("return window.__info;")
+	return SiteWindowData["current"]["id"]
 
 #Возвращает уникальный BranchID на основе названия манги.
 def GetCodeBID(MangaName, StrBID):
@@ -186,17 +198,12 @@ def GetChaptersLinks(Browser):
 	
 	return ChaptersLinks
 
-#Получение списка ссылок на слайды манги.
-def GetMangaSlidesUrlArray(Browser, ChapterLink, Settings):
-	Browser.get(Settings["domain"][:-1] + ChapterLink)
-	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
-	Soup = BeautifulSoup(BodyHTML, "lxml")
-	WebDriverWait(Browser, 60).until(EC.presence_of_element_located, ((By.ID , "reader-pages")))
-	FramesCount = Soup.find('select', {'id': 'reader-pages'})
-	FramesCount = RemoveHTML(FramesCount)
-	FramesCount = FramesCount.split()[-1]
+#Возвращает список URL слайдов (компонент GetMangaSlidesUrlArray).
+def GetSlides(Browser, FirstPage, FramesCount, Settings, ChapterLink):
+	if Browser.current_url != FirstPage:
+		Browser.get(FirstPage)
+		logging.warning("Chapter: \"" + ChapterLink + "\". Restoring the chapter...")
 	sleep(Settings["slide-interval"])
-
 	#Получение ссылок на кадры главы.
 	for i in range(0, int(FramesCount) - 1):
 		#Проверка полной загрузки всех <img> на странице.
@@ -216,37 +223,55 @@ def GetMangaSlidesUrlArray(Browser, ChapterLink, Settings):
 	Soup = BeautifulSoup(BodyHTML, "lxml")
 	SmallSoup = BeautifulSoup(str(Soup.find('div', {'class': 'reader-view__container'})), "html.parser")
 	FramesLinksArray = SmallSoup.find_all('img', {"src": True})
-	FrameLinks = []
+	PreFrameLinks = []
 	for i in range(len(FramesLinksArray)):
-		FrameLinks.append(FramesLinksArray[i]['src'])
+		PreFrameLinks.append(FramesLinksArray[i]['src'])
+
+	return PreFrameLinks
+
+#Получение списка ссылок на слайды манги и преобразование его в нужный формат.
+def GetMangaSlidesUrlArray(Browser, ChapterLink, Settings):
+	Browser.get(Settings["domain"][:-1] + ChapterLink)
+	FirstPage = Browser.current_url
+	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
+	Soup = BeautifulSoup(BodyHTML, "lxml")
+	WebDriverWait(Browser, 60).until(EC.presence_of_element_located, (By.ID , "reader-pages"))
+	FramesCount = Soup.find('select', {'id': 'reader-pages'})
+	FramesCount = RemoveHTML(FramesCount)
+	FramesCount = FramesCount.split()[-1]
+
+	FramesLinks = GetSlides(Browser, FirstPage, FramesCount, Settings, ChapterLink)
 
 	#Проверка ошибки: получен URL не всех слайдов.
-	if len(FramesLinksArray) != int(FramesCount):
-		logging.warning("Chapter: \"" + ChapterLink + "\" parced with errors. Not all slides were received: " + str(len(FramesLinksArray)) + " / " + FramesCount + ".")
+	if len(FramesLinks) != int(FramesCount):
+		logging.warning("Chapter: \"" + ChapterLink + "\" parced with errors. Not all slides were received: " + str(len(FramesLinks)) + " / " + FramesCount + ".")
+		FramesLinks = GetSlides(Browser, FirstPage, FramesCount, Settings, ChapterLink)
+		if len(FramesLinks) != int(FramesCount):
+			logging.warning("Chapter: \"" + ChapterLink + "\" restoring failed. Not all slides were received: " + str(len(FramesLinks)) + " / " + FramesCount + ".")
 	else:
-		logging.info("Chapter: \"" + ChapterLink + "\" parced. Slides count: " + str(len(FramesLinksArray)) + ".")
+		logging.info("Chapter: \"" + ChapterLink + "\" parced. Slides count: " + str(len(FramesLinks)) + ".")
 
 	FrameHeights = []
 	FrameWidths = []
-	for i in range(len(FrameLinks)):
+	for i in range(len(FramesLinks)):
 		FrameHeights.append(Browser.execute_script('''
 			var img = new Image();
 			img.src = arguments[0]
 			return img.height
-		''', FrameLinks[i]))
+		''', FramesLinks[i]))
 
-	for i in range(len(FrameLinks)):
+	for i in range(len(FramesLinks)):
 		FrameWidths.append(Browser.execute_script('''
 			var img = new Image();
 			img.src = arguments[0]
 			return img.width
-		''', FrameLinks[i]))
+		''', FramesLinks[i]))
 
 	ChapterData = []
 	
-	for i in range(len(FrameLinks)):
+	for i in range(len(FramesLinks)):
 		FrameData = dict()
-		FrameData["link"] = FrameLinks[i]
+		FrameData["link"] = FramesLinks[i]
 		FrameData["width"] = FrameWidths[i]
 		FrameData["height"] = FrameHeights[i]
 		ChapterData.append(FrameData)
@@ -260,6 +285,8 @@ def GetMangaData(Browser, MangaName, Settings):
 	Soup = BeautifulSoup(BodyHTML, "lxml")
 	SmallSoup = BeautifulSoup(str(Soup.find('div', {'class': 'media-sidebar__cover paper'})), "html.parser")
 	
+	SiteWindowData = Browser.execute_script("return window.__DATA__;")
+
 	CoverURL = SmallSoup.find('img')['src']
    
 	MangaNameRU = Soup.find('div', {'class': 'media-name__main'}).get_text()
@@ -389,7 +416,7 @@ def GetMangaData(Browser, MangaName, Settings):
 		IsYaoi = True
 	
 	JSON = { 
-		"id" : 0, 
+		"id" : int(SiteWindowData["manga"]["id"]), 
 		"img" : {
 			"high": CoverURL,
 			"mid": "",
@@ -478,7 +505,7 @@ def MakeContentData(ChaptersNames, ChaptersLinks, BID, Browser, Settings, ShowPr
 		ChapterDataBufer["index"] = i + 1
 		PrintProgress(ShowProgress + "Branch ID: " + IsBID + ". Parcing chapters: ", str(i + 1), str(len(ChaptersLinks)))
 		ChapterDataBufer["slides"] = GetMangaSlidesUrlArray(Browser, ChaptersLinks[i] + BID, Settings)
-
+		ChapterDataBufer["id"] = GetChapterID(Browser, ChaptersLinks[i] + BID, Settings, False)
 		ContentDataBranch.append(ChapterDataBufer)
 
 	return ContentDataBranch

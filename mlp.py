@@ -31,7 +31,6 @@ BrowserOptions.add_argument("--disable-gpu")
 Browser = Chrome(service = Service(ChromeDriverManager().install()), options = BrowserOptions)
 Cls()
 Browser.set_window_size(1920, 1080)
-Browser.implicitly_wait(10)
 
 #Чтение настроек.
 logging.info("====== Prepare to starting ======")
