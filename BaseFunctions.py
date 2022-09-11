@@ -69,6 +69,19 @@ def RemoveArgumentsFromURL(URL):
 #=== ПАРСИНГ ГЛАВ ===#
 #==========================================================================================#
 
+#Выполнение, если указано настройками, входа на сайт и отключение уведомления о возрастном ограничении.
+def SignInAndDisableWarning(Browser, Settings):
+	if Settings["sign-in"] == True:
+		if Settings["email"] != "" and Settings["password"] != "":
+			LogIn(Browser, Settings)
+			logging.info("Sign in as \"" + Settings["email"] + "\".")
+		else:
+			logging.error("Uncorrect user data! Check \"Settings.json\".")
+
+	if Settings["disable-age-limit-warning"] == True:
+		DisableAgeLimitWarning(Browser, Settings)
+		logging.info("Age limit warning disabled.")
+
 #Возвращает результат проверки: платный ли тайтл.
 def IsMangaPaid(Browser, MangaName, Settings):
 	#Проверка нахождения на нужной странице.

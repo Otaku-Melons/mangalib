@@ -1,3 +1,5 @@
+#!/usr/bin/env python3.9
+
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -8,15 +10,14 @@ import logging
 import json
 import sys
 
+from BaseFunctions import SignInAndDisableWarning
+from BaseFunctions import GetCodeBID
 from BaseFunctions import Shutdown
 from BaseFunctions import Cls
 
 from Components import GetChapterSlidesInJSON
-from Components import SignInAndDisableWarning
 from Components import ParceTitle
 from Components import ScanTitles
-
-from BaseFunctions import GetCodeBID
 
 #Запись лога.
 CurrentTime = datetime.datetime.now()
@@ -53,6 +54,17 @@ with open("Settings.json") as FileRead:
 			Settings["domain"] = "https://" + Settings["domain"] + ".me/"
 			logging.info("Domain set as \"" + Settings["domain"] + "\".")
 
+IsForceModeActivated = False
+ForceModString = ""
+#Проверка режима перезаписи.
+if "-f" in sys.argv:
+	IsForceModeActivated = True
+	logging.info("Force mode: ON")
+	ForceModString = "Force mode: ON\n"
+else:
+	logging.info("Force mode: OFF")
+	ForceModString = "Force mode: OFF\n"
+
 #Обработка аргументов.
 if len(sys.argv) > 2:
 	#Вывод в лог сообщения об активированном режиме отключения ПК после работы парсера.
@@ -79,13 +91,13 @@ if len(sys.argv) > 2:
 					MangaName = MangaList[i]
 					logging.info("Parcing: \"" + MangaName + "\". Starting...")
 					InFuncProgress = ""
-					InFuncProgress += InFuncProgress_Shutdown + "Parcing titles from manifest: " + str(i + 1) + " / " + str(len(MangaList)) + "\n"
-					ParceTitle(Browser, MangaName, Settings, ShowProgress = InFuncProgress)
+					InFuncProgress += InFuncProgress_Shutdown + ForceModString + "Parcing titles from manifest: " + str(i + 1) + " / " + str(len(MangaList)) + "\n"
+					ParceTitle(Browser, MangaName, Settings, ShowProgress = InFuncProgress, ForceMode = IsForceModeActivated)
 		#Парсинг одного тайтла.
 		else:
 			MangaName = sys.argv[2]
 			logging.info("Parcing: \"" + MangaName + "\". Starting...")
-			ParceTitle(Browser, MangaName, Settings, ShowProgress = InFuncProgress_Shutdown)
+			ParceTitle(Browser, MangaName, Settings, ShowProgress = InFuncProgress_Shutdown + ForceModString, ForceMode = IsForceModeActivated)
 
 	#Вывод BID алиаса.
 	if "ubid" in sys.argv and len(sys.argv) == 3:
@@ -113,6 +125,7 @@ if "-s" in sys.argv:
 		logging.error("Not enough arguments.")
 	logging.info("Shutdowning computer.")
 	Shutdown()
+
 #Обработка исключения: недостаточно аргументов.
 elif len(sys.argv) == 1:
 	logging.error("Not enough arguments.")
