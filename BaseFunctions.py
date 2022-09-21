@@ -2,6 +2,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 from bs4 import BeautifulSoup
+from PIL import ImageFile
 from sys import platform
 from time import sleep
 from PIL import Image
@@ -12,7 +13,6 @@ import logging
 import PIL
 import re
 import os
-
 
 #==========================================================================================#
 #=== БАЗОВЫЕ ФУНКЦИИ ===#
@@ -376,15 +376,22 @@ def GetMangaSlidesUrlList(Browser, ChapterLink, Settings):
 
 				# Попытка обработать слайд для получения размеров.
 				try:
+					# Открытие слайда из потока запроса.
 					Slide = Image.open(SlideRequest)
+					# Запись размеров слайда.
 					SlideW = Slide.width
 					SlideH = Slide.height
+
 				except PIL.UnidentifiedImageError:
 					# Запись в лог ошибки распознания слайда.
 					logging.warning("Chapter: \"" + ChapterLink + "\" parcing. Unable to recognize image \"" + SlidesLinks[i] + "\".")
 
+				except OSError:
+					# Запись в лог ошибки: усечённый файл.
+					logging.warning("Chapter: \"" + ChapterLink + "\" parcing. Truncated image \"" + SlidesLinks[i] + "\".")
+					
 			else:
-				# Инкремент количества ошибок.
+				# Инкремент количества неполученных слайдов.
 				SlidesErrors += 1
 				# Запись в лог ошибки получения слайда с сервера.
 				logging.warning("Chapter: \"" + ChapterLink + "\" parcing. Failed to request \"" + SlidesLinks[i] + "\".")
