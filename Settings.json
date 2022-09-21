@@ -1,10 +1,13 @@
 {
     "domain": "mangalib",
-    "save-directory" : "",
+    "directory" : "",
     "scan-target" : "",
     "disable-age-limit-warning": true,
     "sign-in": false,
     "email": "",
     "password": "",
-    "slide-interval": 5
+    "delay": 5,
+    "getting-slide-sizes": false,
+    "old-slide-receiving-mode": false,
+    "server": "compress"
 }

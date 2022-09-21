@@ -1,16 +1,18 @@
-from operator import truediv
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 from bs4 import BeautifulSoup
 from sys import platform
 from time import sleep
+from PIL import Image
 
+import requests
 import hashlib
-
 import logging
+import PIL
 import re
 import os
+
 
 #==========================================================================================#
 #=== БАЗОВЫЕ ФУНКЦИИ ===#
@@ -69,6 +71,18 @@ def RemoveArgumentsFromURL(URL):
 #=== ПАРСИНГ ГЛАВ ===#
 #==========================================================================================#
 
+#Проверяет ветвь на пустоту.
+def CheckBranchForEmpty(Browser, BIDs, Index, MangaName, Settings):
+	if BIDs != None:
+		Browser.get(Settings["domain"] + MangaName + "?bid=" + BIDs[Index])
+	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
+	Soup = BeautifulSoup(BodyHTML, "lxml")
+	SmallSoup = str(Soup.find("div", {"class": "empty"}))
+	if "Здесь пока нет глав" in SmallSoup:
+		return True
+	else:
+		return False
+
 #Выполнение, если указано настройками, входа на сайт и отключение уведомления о возрастном ограничении.
 def SignInAndDisableWarning(Browser, Settings):
 	if Settings["sign-in"] == True:
@@ -97,18 +111,24 @@ def IsMangaPaid(Browser, MangaName, Settings):
 	else:
 		return True
 
-#Получает ID главы на сайте.
-def GetChapterID(Browser, ChapterLink, Settings, GoToPage):
-	if GoToPage == True:
-		Browser.get(Settings["domain"][:-1] + ChapterLink)
+# Получает ID главы на сайте. 
+# Примечание: вызывать после перехода на страницу главы.
+def GetChapterID(Browser):
+	# Информация о странице из JS-данных сайта.
 	SiteWindowData = Browser.execute_script("return window.__info;")
+
 	return SiteWindowData["current"]["id"]
 
-#Возвращает уникальный BranchID на основе названия манги.
-def GetCodeBID(MangaName, StrBID):
-		MangaIntName = hashlib.md5(MangaName.encode())
-		MangaIntName = MangaIntName.hexdigest()
-		return str(int(MangaIntName, 16)) + StrBID
+# Возвращает уникальный BranchID на основе названия манги.
+def GetSynt_BranchID(MangaName, True_BranchID):
+	# Вычисление MD5 хеш-суммы.
+	MangaIntName = hashlib.md5(MangaName.encode())
+	# Получение шестнадцатиричного представления хеш-суммы.
+	MangaIntName = MangaIntName.hexdigest()
+	# Преобразование хеш-суммы в десятичное строковое представление.
+	MangaIntName = str(int(MangaIntName, 16))
+	
+	return str(MangaIntName) + True_BranchID
 
 #Вход на сайт.
 def LogIn(Browser, Settings):
@@ -151,37 +171,55 @@ def DisableAgeLimitWarning(Browser, Settings):
 	Browser.find_elements(By.CLASS_NAME, "control__text")[-1].click()
 	Browser.find_element(By.CLASS_NAME, 'reader-caution-continue').click()
 
-#Получает bid веток перевода.
-def GetBID(Browser, MangaName, Settings):
+# Получает истинные ID ветвей переводов.
+def GetBranchesID(Browser, MangaName, Settings):
+	# Переход на страницу с информацией о тайтле.
 	Browser.get(Settings["domain"] + MangaName + "?section=chapters")
-	TranslateBranches = Browser.find_elements(By.CLASS_NAME, "team-list-item")
-	BIDs = list()
-	for InObj in TranslateBranches:
+	# Поиск всех кнопок смены переводчика.
+	TranslatorsButtons = Browser.find_elements(By.CLASS_NAME, "team-list-item")
+	# Список истинных ID ветвей перевода.
+	BranchesID = []
+
+	# Кликать по каждой кнопке и записывать истинный ID из адресной строки браузера. 
+	for InObj in TranslatorsButtons:
+		# Проверка кнопки на доступность.
 		if InObj.is_displayed() and InObj.is_enabled():
 			InObj.click()
-			BIDs.append(str(Browser.current_url).split('?')[-1].split('&')[0].split('=')[1])
-	return BIDs
+			BranchesID.append(str(Browser.current_url).split('?')[-1].split('&')[0].split('=')[1])
 
-#Открывает панель для получения названий глав, ссылок на главы и слайдов
-def PrepareToParcingChapter(Browser, MangaName, Settings, BID):
-	if BID is None:
+	return BranchesID
+
+# Открывает навигационную панель для получения названий глав и ссылок на главы.
+def PrepareToParcingChapters(Browser, Settings, MangaName, True_BranchID):
+	# Проверка на существование истинного ID ветви (в случае, если в тайтле только одна ветвь перевода) и переход к нужной странице.
+	if True_BranchID is None:
 		Browser.get(Settings["domain"] + MangaName + "?section=chapters")
 	else:
-		Browser.get(Settings["domain"] + MangaName + "?bid=" + str(BID) + "&section=chapters")
-	#Ожидание полной подгрузки страницы.
-	Wait = WebDriverWait(Browser, 500)
-	Wait.until(EC.visibility_of_element_located((By.CLASS_NAME, "media-chapter__name")))
+		Browser.get(Settings["domain"] + MangaName + "?bid=" + str(True_BranchID) + "&section=chapters")
 
-	#Получение ссылки на последнюю главу.
+	# Ожидание загрузки блока с ссылкой на самую свежую главу в ветви перевода.
+	WebDriverWait(Browser, 60).until(EC.visibility_of_element_located((By.CLASS_NAME, "media-chapter__name")))
+
+	# HTML-код страницы после полной загрузки.
 	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
+	# Парсинг HTML-кода страницы.
 	Soup = BeautifulSoup(BodyHTML, "lxml")
-	LastChapter = Soup.find_all('div', {'class': 'media-chapter__name text-truncate'})[0]
+	# Поиск блока самой свежей главы.
+	LastChapter = Soup.find_all("div", {"class": "media-chapter__name text-truncate"})[0]
+	# Парсинг блока самой свежей главы.
 	Soup = BeautifulSoup(str(LastChapter), "lxml")
-	LastChapter = Soup.find('a')
+	# Поиск ссылки на самую свежую главу.
+	LastChapter = Soup.find("a")
 
-	#Переход к последней главе.
-	Browser.get(Settings["domain"][:-1] + LastChapter['href'])
-	Browser.find_elements(By.CLASS_NAME, 'reader-header-action__text')[1].click()
+	# Переход к самой свежей главе главе.
+	Browser.get(Settings["domain"][:-1] + LastChapter["href"])
+	# Поиск кнопки для открытия блока с главами.
+	ChaptersSpoilerButton = Browser.find_elements(By.CLASS_NAME, "reader-header-action__text")
+
+	# Проверка доступности кнопки и её нажатие.
+	if len(ChaptersSpoilerButton) >= 2:
+		if ChaptersSpoilerButton[1].is_displayed():
+			ChaptersSpoilerButton[1].click()
 	
 #Получение списка названий глав.
 def GetChaptersNames(Browser):
@@ -195,28 +233,32 @@ def GetChaptersNames(Browser):
 	Bufer = []
 	return ChaptersNames
 
-#Получение списка ссылок на главы.
+# Получает список ссылок на главы. 
+# Примечание: предварительно вызвать PrepareToParcingChapters.
 def GetChaptersLinks(Browser):
+	# HTML-код страницы после полной загрузки.
 	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
+	# Парсинг HTML-кода страницы.
 	Soup = BeautifulSoup(BodyHTML, "lxml")
-	SmallSoup = Soup.find_all('div', {'class': 'modal__body'})
+	# Поиск модальных блоков, среди которого есть блок с главами.
+	SmallSoup = Soup.find_all("div", {"class": "modal__body"})
+	# Парсинг блока с главами.
 	SmallSoup = BeautifulSoup(str(SmallSoup[-1]), "lxml")
-	ChaptersLinks = SmallSoup.find_all('a', {'class': 'menu__item'})
-	
-	Bufer = []
-	for InObj in ChaptersLinks:
-		Bufer.append(RemoveSpaceSymbols(RemoveHTML(InObj['href'])).split('?')[0])
-	ChaptersLinks = Bufer
-	Bufer = []
+	# Поиск HTML-ссылок на главы внутри блока.
+	ChaptersLinks = SmallSoup.find_all("a", {"class": "menu__item"})
+
+	# Для кажой ссылки оставить только источник.
+	for i in range(0, len(ChaptersLinks)):
+		ChaptersLinks[i] = RemoveSpaceSymbols(RemoveHTML(ChaptersLinks[i]["href"])).split('?')[0]
 	
 	return ChaptersLinks
 
-#Возвращает список URL слайдов (компонент GetMangaSlidesUrlArray).
+#Возвращает список URL слайдов (компонент deprecated_GetMangaSlidesUrlArray).
 def GetSlides(Browser, FirstPage, FramesCount, Settings, ChapterLink):
 	if Browser.current_url != FirstPage:
 		Browser.get(FirstPage)
-		logging.warning("Chapter: \"" + ChapterLink + "\". Restoring the chapter...")
-	sleep(Settings["slide-interval"])
+		logging.warning("Chapter: \"" + ChapterLink + "\". Restoring chapter...")
+	sleep(Settings["delay"])
 	#Получение ссылок на кадры главы.
 	for i in range(0, int(FramesCount) - 1):
 		#Проверка полной загрузки всех <img> на странице.
@@ -230,7 +272,7 @@ def GetSlides(Browser, FirstPage, FramesCount, Settings, ChapterLink):
 		#Нажатие на слайд для перехода к следующему.
 		Browser.find_element(By.CLASS_NAME, 'reader-view__container').click()
 		#Пауза между перелистыванием для снижения нагрузки на сервер.
-		sleep(Settings["slide-interval"])
+		sleep(Settings["delay"])
 
 	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
 	Soup = BeautifulSoup(BodyHTML, "lxml")
@@ -243,16 +285,15 @@ def GetSlides(Browser, FirstPage, FramesCount, Settings, ChapterLink):
 	return PreFrameLinks
 
 #Получение списка ссылок на слайды манги и преобразование его в нужный формат.
-def GetMangaSlidesUrlArray(Browser, ChapterLink, Settings):
+def deprecated_GetMangaSlidesUrlArray(Browser, ChapterLink, Settings):
 	Browser.get(Settings["domain"][:-1] + ChapterLink)
 	FirstPage = Browser.current_url
+	WebDriverWait(Browser, 60).until(EC.presence_of_element_located, (By.ID , "reader-pages"))
 	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
 	Soup = BeautifulSoup(BodyHTML, "lxml")
-	WebDriverWait(Browser, 60).until(EC.presence_of_element_located, (By.ID , "reader-pages"))
 	FramesCount = Soup.find('select', {'id': 'reader-pages'})
 	FramesCount = RemoveHTML(FramesCount)
 	FramesCount = FramesCount.split()[-1]
-
 	FramesLinks = GetSlides(Browser, FirstPage, FramesCount, Settings, ChapterLink)
 
 	#Проверка ошибки: получен URL не всех слайдов.
@@ -288,6 +329,98 @@ def GetMangaSlidesUrlArray(Browser, ChapterLink, Settings):
 		FrameData["width"] = FrameWidths[i]
 		FrameData["height"] = FrameHeights[i]
 		ChapterData.append(FrameData)
+
+	return ChapterData
+
+# Получает список слайдов главы из JS-данных страницы и определяет их размеры в пикселях.
+def GetMangaSlidesUrlList(Browser, ChapterLink, Settings):
+	# Переход на страницу главы.
+	Browser.get(Settings["domain"][:-1] + ChapterLink)
+	# Ожидание загрузки JS данных о главе.
+	WebDriverWait(Browser, 60).until(EC.presence_of_element_located, (By.ID , "pg"))
+	# Получение JS инофрмации о странице.
+	SiteWindowInfo = Browser.execute_script("return window.__info;")
+	# Получение JS данных о главе.
+	SiteWindowPg = Browser.execute_script("return window.__pg;")
+	# Получение ссылки на сервер-хранилище.
+	StorageLink = SiteWindowInfo["servers"][Settings["server"]]
+	# Получение алиаса главы на сервере-хранилище.
+	ChapterSlug = SiteWindowInfo["img"]["url"]
+	# Список URL слайдов.
+	SlidesLinks = []
+
+	#Формирование для каждого слайда полной ссылки на сервер-хранилище.
+	for i in range(0, len(SiteWindowPg)):
+		SlidesLinks.append(StorageLink + "/" + ChapterSlug + SiteWindowPg[i]["u"])
+
+	# Ширина слайдов.
+	SlidesSizesW = []
+	# Высота слайдов.
+	SlidesSizesH = []
+	# Количество неполученных слайдов.
+	SlidesErrors = 0
+
+	# Подгрузка слайдов и определение их размеров, если указано в настройках.
+	if Settings["getting-slide-sizes"] == True:
+		for i in range(0, len(SlidesLinks)):
+			# Ширина текущего слайда.
+			SlideW = None
+			# Высота текущего слайда.
+			SlideH = None
+			# Проверка успешности запроса на получение слайда.
+			Request = requests.get(SlidesLinks[i], headers = {"referer": Settings["domain"][:-1] + ChapterLink}, stream = True)
+			# Обработка статуса запроса.
+			if Request.status_code == 200:
+				# Получение необработанного слайда.
+				SlideRequest = Request.raw
+
+				# Попытка обработать слайд для получения размеров.
+				try:
+					Slide = Image.open(SlideRequest)
+					SlideW = Slide.width
+					SlideH = Slide.height
+				except PIL.UnidentifiedImageError:
+					# Запись в лог ошибки распознания слайда.
+					logging.warning("Chapter: \"" + ChapterLink + "\" parcing. Unable to recognize image \"" + SlidesLinks[i] + "\".")
+
+			else:
+				# Инкремент количества ошибок.
+				SlidesErrors += 1
+				# Запись в лог ошибки получения слайда с сервера.
+				logging.warning("Chapter: \"" + ChapterLink + "\" parcing. Failed to request \"" + SlidesLinks[i] + "\".")
+
+			# Помещение размеров слайда в контейнеры.
+			SlidesSizesW.append(SlideW)
+			SlidesSizesH.append(SlideH)
+
+			# Интервал запроса слайдов.
+			sleep(Settings["delay"])
+
+	else:
+		# Заполнение размеров слайдов неопределёнными значениями.
+		for i in range(0, len(SlidesLinks)):
+			SlidesSizesW.append(None)
+			SlidesSizesH.append(None)
+
+		# Интервал перехода между главами.
+		sleep(Settings["delay"])
+
+	# Структура главы.
+	ChapterData = []
+	
+	# Формирование структуры главы для записи в JSON.
+	for i in range(len(SlidesLinks)):
+		FrameData = dict()
+		FrameData["link"] = SlidesLinks[i]
+		FrameData["width"] = SlidesSizesW[i]
+		FrameData["height"] = SlidesSizesH[i]
+		ChapterData.append(FrameData)
+
+	# Запись в лог результата выполнения и обработка неполного получения данных о слайдах.
+	if SlidesErrors == 0:
+		logging.info("Chapter: \"" + ChapterLink + "\" parced. Slides count: " + str(len(ChapterData)) + ".")
+	else:
+		logging.warning("Chapter: \"" + ChapterLink + "\" parced with errors. Not all slides were received correctly : " + str(len(ChapterData) - SlidesErrors) + " / " + str(len(ChapterData)) + ".")
 
 	return ChapterData
 
@@ -407,7 +540,7 @@ def GetMangaData(Browser, MangaName, Settings):
 	#Если нет веток перевода, то создать пустой шаблон.
 	if len(Branches) == 0:
 		InBranch = {}
-		InBranch['id'] = GetCodeBID(MangaName, "")
+		InBranch['id'] = GetSynt_BranchID(MangaName, "")
 		InBranch['img'] = ""
 		InBranch['publishers'] = Publishers
 		InBranch['subscribed'] = False
@@ -509,7 +642,7 @@ def MakeContentData(ChaptersNames, ChaptersLinks, BID, Browser, Settings, ShowPr
 		ChapterDataBufer = dict(ChapterData)
 		ChapterNameData = ChaptersNames[i].split(' ')
 
-		ChapterDataBufer["tome"] = ChapterNameData[1]
+		ChapterDataBufer["tome"] = int(ChapterNameData[1])
 		ChapterDataBufer["chapter"] = ChapterNameData[3]
 		if len(ChapterNameData) > 4:
 			ChapterDataBufer["name"] = RemoveSpaceSymbols(ChaptersNames[i].split('-')[-1])
@@ -517,9 +650,192 @@ def MakeContentData(ChaptersNames, ChaptersLinks, BID, Browser, Settings, ShowPr
 			ChapterDataBufer["name"] = ""
 		ChapterDataBufer["index"] = i + 1
 		PrintProgress(ShowProgress + "Branch ID: " + IsBID + ". Parcing chapters: ", str(i + 1), str(len(ChaptersLinks)))
-		ChapterDataBufer["slides"] = GetMangaSlidesUrlArray(Browser, ChaptersLinks[i] + BID, Settings)
-		ChapterDataBufer["id"] = GetChapterID(Browser, ChaptersLinks[i] + BID, Settings, False)
+		ChapterDataBufer["id"] = GetChapterID(Browser)
+		# Переключение между старым и новым режимами получения слайдов главы.
+		if Settings["old-slide-receiving-mode"] == True:
+			ChapterDataBufer["slides"] = deprecated_GetMangaSlidesUrlArray(Browser, ChaptersLinks[i] + BID, Settings)
+		else:
+			ChapterDataBufer["slides"] = GetMangaSlidesUrlList(Browser, ChaptersLinks[i] + BID, Settings)
+
 		ContentDataBranch.append(ChapterDataBufer)
 
 	return ContentDataBranch
 
+#==========================================================================================#
+#=== ОБНОВЛЕНИЕ ТАЙТЛА ===#
+#==========================================================================================#
+
+# Получение из JSON тайтла списка синтетических ID ветвей.
+def GetBranchesIdFromJSON(TitleJSON):
+	# Список синтетических ID ветвей переводов.
+	ListID = []
+
+	# Для каждой ветви записать её синтетический ID.
+	for i in range(0, len(TitleJSON["branches"])):
+		ListID.append(TitleJSON["branches"][i]["id"])
+
+	return ListID
+
+# Построение списка ссылок на главы на основе ветви перевода из JSON.
+def BuildLinksFromJSON(TitleJSON, Synt_BranchID, MangaName, Settings):
+	# Список ссылок на главы.
+	ChaptersLinks = []
+	# Данные из ветви перевода внутри JSON.
+	ChaptersFromJSON = TitleJSON["content"][Synt_BranchID]
+
+	# Для каждой главы построить ссылку.
+	for InObj in ChaptersFromJSON:
+		ChaptersLinks.append(Settings["domain"] + MangaName + "/v" + str(InObj["tome"]) + "/c" + InObj["chapter"])
+
+	return ChaptersLinks
+
+# Возвращает номера тома и главы, разделённые пробелом, основываясь на URL.
+def GetVolumeAndChapterFromURL(ChapterURL):
+	# Номер тома.
+	Volume = ChapterURL.split('?')[0].split('/')	
+	# Номер главы.
+	Chapter = ChapterURL.split('?')[0].split('/')
+
+	# Проверка на корректность URL и получение номера тома.
+	if len(Volume) > 3:
+		Volume = Volume[-2].replace('v', '')
+	else:
+		Volume = ""
+
+	# Проверка на корректность URL и получение номера главы.
+	if len(Chapter) > 3:
+		Chapter = Chapter[-1].replace('c', '')
+	else:
+		Chapter = ""
+
+	return Volume + " " + Chapter
+
+# Парсинг одной главы.
+def ParceChapter(Browser, Settings, ChapterFullLink, True_BranchID):
+	# Удаление аргументов из URL.
+	ChapterFullLink = RemoveArgumentsFromURL(ChapterFullLink)
+	# Переход на страницу главы.
+	Browser.get(ChapterFullLink)
+	# Информация о странице из JS-данных сайта.
+	SiteWindowInfo = Browser.execute_script("return window.__info;")
+	# Информация о всех главах из JS-данных сайта.
+	SiteWindowChaptersData = Browser.execute_script("return window.__DATA__;")
+	SiteWindowChaptersData = SiteWindowChaptersData["chapters"]
+	SiteWindowChaptersData.reverse()
+	# Структура главы для помещения в JSON.
+	ChapterStruct = {
+		"id": 0,
+		"tome": 0,
+		"chapter": "",
+		"name": "",
+		"score": 0,
+		"rated": None,
+		"viewed": None,
+		"upload_date": "",
+		"is_paid": False,
+		"is_bought": None,
+		"price": None,
+		"pub_date": None,
+		"publishers": [],
+		"index": 0,
+		"volume_id": None,
+		"slides": []
+	}
+
+	# Если есть истинный ID ветви перевода, то для удобства добавить к нему определение.
+	if True_BranchID != "":
+		True_BranchID = "?bid=" + True_BranchID
+
+	# Получение ID.
+	ChapterStruct["id"] = SiteWindowInfo["current"]["id"]
+	# Получение номера тома.
+	ChapterStruct["tome"] = SiteWindowInfo["current"]["volume"]
+	# Получение номера главы.
+	ChapterStruct["chapter"] = SiteWindowInfo["current"]["number"]
+	# Получение названия.
+	ChapterStruct["name"] = SiteWindowChaptersData[SiteWindowInfo["current"]["index"] - 1]["chapter_name"]
+
+	# Переключение между старым и новым режимами получения слайдов главы.
+	if Settings["old-slide-receiving-mode"] == True:
+		ChapterStruct["slides"] = deprecated_GetMangaSlidesUrlArray(Browser, ChapterFullLink.replace(Settings["domain"][:-1], "") + True_BranchID, Settings)
+	else:
+		ChapterStruct["slides"] = GetMangaSlidesUrlList(Browser, ChapterFullLink.replace(Settings["domain"][:-1], "") + True_BranchID, Settings)
+
+	return ChapterStruct
+	
+# Преобразует синтетический BranchID в истинный.
+def SyntToTrueBranchID(Synt_BranchID, MangaName):
+	# Десятичное представление MD5 хеш-суммы алиаса манги.
+	PartMD5 = GetSynt_BranchID(MangaName, "")
+	# Удаление из синтетического BranchID генерируемой части.
+	True_BranchID = Synt_BranchID.replace(PartMD5, "")
+
+	return True_BranchID
+
+# Преобразует истинный BranchID в синтетический.
+def TrueToSyntBranchID(True_BranchID, MangaName):
+	# Десятичное представление MD5 хеш-суммы алиаса манги.
+	PartMD5 = GetSynt_BranchID(MangaName, "")
+	# Синтетический BranchID.
+	Synt_BranchID = PartMD5 + True_BranchID
+
+	return Synt_BranchID
+
+# Получает структуру описания ветвей переводов для помещения в JSON.
+def GetBranchesDescriptionStruct(Browser, Settings, MangaName, True_BranchesID):
+	# Переход на страницу с главами тайтла.
+	Browser.get(Settings["domain"] + MangaName + "?section=chapters")
+	# Получение HTML-кода страницы.
+	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
+	# Парсинг исходного кода страницы.
+	Soup = BeautifulSoup(BodyHTML, "lxml")
+	# Блоки с ветвями.
+	BranchesHTML = Soup.find_all("div", {"class": "team-list-item"})
+	# Структура ветвей переводов.
+	BranchesStruct = []
+	# Индекс ветви.
+	BranchIndex = 0
+	
+	# Для каждого блока ветви сформировать структуру.
+	for i in range(0, len(BranchesHTML)):
+		# Инкремент индекса ветви.
+		BranchIndex += 1
+		# Буферное значение для формирования структуры.
+		BuferBranch = {}
+		# Парсинг блока ветви.
+		SmallSoup = BeautifulSoup(str(BranchesHTML[i]), "lxml")
+		# Информация о переводчике.
+		PublisherInfo = {}
+
+		# Присвоение синтетического BranchID.
+		BuferBranch["id"] = TrueToSyntBranchID(True_BranchesID[i], MangaName)
+		# Аватар переводчика.
+		BuferBranch["img"] = Settings["domain"][:-1] + SmallSoup.find('div', {'class': 'team-list-item__cover'})['style'].split('(')[-1].split(')')[0].replace('"', '')
+		# Создание контейнера для переводчиков.
+		BuferBranch["publishers"] = []
+		# Есть ли подписка (не определяется).
+		BuferBranch["subscribed"] = False
+		# Количество голосов (не определяется).
+		BuferBranch["total_votes"] = 0
+		# Количество глав (не определяется).
+		BuferBranch["count_chapters"] = 0
+
+		# ID переводчика (не определяется).
+		PublisherInfo["id"] = 0
+		# Название переводчика.
+		PublisherInfo["name"] = RemoveSpaceSymbols(RemoveHTML(SmallSoup.find('span')))
+		# Копирование ссылки на аватар переводчика.
+		PublisherInfo["img"] = BuferBranch["img"]
+		# Директория переводчика на сервере.
+		PublisherInfo["dir"] = BuferBranch["img"].split('/')[-3]
+		# Слоган переводчика (не определяется.)
+		PublisherInfo["tagline"] = ""
+		# Тип.
+		PublisherInfo["type"] = "Переводчик"
+		# Добавление переводчика.
+		BuferBranch["publishers"].append(PublisherInfo)
+
+		# Помещение буферной структуры в основной контейнер.
+		BranchesStruct.append(BuferBranch)
+
+	return BranchesStruct
