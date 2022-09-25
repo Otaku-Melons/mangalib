@@ -1,16 +1,18 @@
 from bs4 import BeautifulSoup
+
 import logging
 import json
 import os
 
-#=== БАЗОВЫЕ ФУНКЦИИ ===#
+# >>>>> БАЗОВЫЕ ФУНКЦИИ <<<<< #
 from BaseFunctions import Cls
 
-#=== ПАРСИНГ ГЛАВ ===#
+# >>>>> ПАРСИНГ ТАЙТЛА <<<<< #
 from BaseFunctions import deprecated_GetMangaSlidesUrlArray
 from BaseFunctions import PrepareToParcingChapters
 from BaseFunctions import GetMangaSlidesUrlList
 from BaseFunctions import CheckBranchForEmpty
+from BaseFunctions import GetMangaData_Status
 from BaseFunctions import GetChaptersNames
 from BaseFunctions import GetChaptersLinks
 from BaseFunctions import GetSynt_BranchID
@@ -19,14 +21,14 @@ from BaseFunctions import GetBranchesID
 from BaseFunctions import GetMangaData
 from BaseFunctions import IsMangaPaid
 
-#=== ОБНОВЛЕНИЕ ТАЙТЛА ===#
+# >>>>> ОБНОВЛЕНИЕ ТАЙТЛА <<<<< #
 from BaseFunctions import GetBranchesDescriptionStruct
 from BaseFunctions import GetBranchesIdFromJSON
 from BaseFunctions import TrueToSyntBranchID
 from BaseFunctions import BuildLinksFromJSON
 from BaseFunctions import ParceChapter
 
-#Парсинг одного тайтла.
+#Парсинг тайтла.
 def ParceTitle(Browser, MangaName, Settings, ShowProgress, ForceMode):
 
 	#Проверка существования файла.
@@ -65,20 +67,16 @@ def ParceTitle(Browser, MangaName, Settings, ShowProgress, ForceMode):
 						JSON["branches"][i]["id"] = GetSynt_BranchID(MangaName, str(BIDs[i]))
 
 						PrepareToParcingChapters(Browser, Settings, MangaName, BIDs[i])
-						BID = "?bid=" + str(BIDs[i])
 						BIDlog = str(BIDs[i])
 
 					ChaptersNames = GetChaptersNames(Browser)
 					ChaptersLinks = GetChaptersLinks(Browser)
 					logging.info("Parcing: \"" + MangaName + "\". Branch ID: " + BIDlog + ". Chapters in branch: " + str(len(ChaptersLinks)) + ".")
 					if BIDs is None:
-						JSON["content"][GetSynt_BranchID(MangaName, "")] = MakeContentData(ChaptersNames, ChaptersLinks, BID, Browser, Settings, ShowProgress)
+						JSON["content"][GetSynt_BranchID(MangaName, "")] = MakeContentData(Browser, Settings, ShowProgress, ChaptersNames, ChaptersLinks, "")
 					else:
-						if BIDs is None:
-							JSON["content"][GetSynt_BranchID(MangaName, str(BIDs[i]))] = MakeContentData(ChaptersNames, ChaptersLinks, BID, Browser, Settings, ShowProgress)
-						else:
-							BIDlog = str(BIDs[i])
-							JSON["content"][GetSynt_BranchID(MangaName, str(BIDs[i]))] = MakeContentData(ChaptersNames, ChaptersLinks, BID, Browser, Settings, ShowProgress)
+						BIDlog = str(BIDs[i])
+						JSON["content"][GetSynt_BranchID(MangaName, str(BIDs[i]))] = MakeContentData(Browser, Settings, ShowProgress, ChaptersNames, ChaptersLinks, str(BIDs[i]))
 
 				else:
 					if BIDs != None:
@@ -93,9 +91,9 @@ def ParceTitle(Browser, MangaName, Settings, ShowProgress, ForceMode):
 		with open(Settings["directory"] + "\\" + MangaName + ".json", "w", encoding = "utf-8") as FileWrite:
 			json.dump(JSON, FileWrite, ensure_ascii = False, indent = 2, separators = (',', ': '))
 			logging.info("Parcing: \"" + MangaName + "\". JSON file was created.")
-		logging.info("Parcing: \"" + MangaName + "\". SUCCESSFULL!!!")
+		logging.info("Parcing: \"" + MangaName + "\". Completed.")
 
-# Получение новых глав для всех веток перевода одного тайтла.
+# Обновление тайтла.
 def UpdateTitle(Browser, Settings, MangaName, InFuncMessage_Progress):
 	# Очистка содержимого консоли.
 	Cls()
@@ -126,6 +124,19 @@ def UpdateTitle(Browser, Settings, MangaName, InFuncMessage_Progress):
 				NewChaptersInBranchCount = 0
 				# Количество изменённых ветей.
 				UpdatedBranchesCount = 0
+				# Количество обновлений описания тайтла.
+				DescriptionUpdatesCount = 0
+
+				# Получение статуса тайтла с сайта.
+				StatusFromSite = GetMangaData_Status(Browser, Settings, MangaName)
+				# Если статус изменился, записать его в лог и в JSON.
+				if StatusFromSite != TitleJSON["status"]:
+					# Изменить статус в JSON.
+					TitleJSON["status"] = StatusFromSite
+					# Запись в лог сообщения о новом статусе тайтла.
+					logging.info("Updating: \"" + MangaName + "\". Detected new status of title: \"" + StatusFromSite["name"] + "\".")
+					# Инкремент количества обновлений описания тайтла.
+					DescriptionUpdatesCount += 1
 
 				# Проверка на соответствие количества ветвей переводов: в JSON и на сайте одна ветвь.
 				if len(True_BranchesID) == 0 and len(Synt_BranchesID) == 1:
@@ -296,14 +307,14 @@ def UpdateTitle(Browser, Settings, MangaName, InFuncMessage_Progress):
 			# Перезапись контента.
 			TitleJSON["content"] = ContentData
 
-			# Если есть новые главы, то перезаписать файл.
-			if NewChaptersCount > 0:
+			# Если есть новые главы или описание тайтла изменилось, то перезаписать файл.
+			if NewChaptersCount > 0 or DescriptionUpdatesCount > 0:
 				# Сохранение файла JSON.
 				with open(Settings["directory"] + "\\" + MangaName + ".json", "w", encoding = "utf-8") as FileWrite:
 					json.dump(TitleJSON, FileWrite, ensure_ascii = False, indent = 2, separators = (',', ': '))
 					# Запись в лог сообщения об успешном создании файла JSON.
 					logging.info("Updating: \"" + MangaName + "\". Completed. Added " + str(NewChaptersCount) + " chapters in " + str(UpdatedBranchesCount) + " branches.")
-			else:
+			elif NewChaptersCount > 0:
 				# Запись в лог сообщения об успешном создании файла JSON.
 				logging.info("Updating: \"" + MangaName + "\". Completed. New chapters not found.")
 

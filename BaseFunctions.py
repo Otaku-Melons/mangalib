@@ -2,7 +2,6 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 from bs4 import BeautifulSoup
-from PIL import ImageFile
 from sys import platform
 from time import sleep
 from PIL import Image
@@ -15,10 +14,10 @@ import re
 import os
 
 #==========================================================================================#
-#=== БАЗОВЫЕ ФУНКЦИИ ===#
+# >>>>> БАЗОВЫЕ ФУНКЦИИ <<<<< #
 #==========================================================================================#
 
-#Перечисление областей тегов HTML.
+# Регулярное выражение фильтрации тегов HTML.
 TagsHTML = re.compile('<.*?>|&([a-z0-9]+|#[0-9]{1,6}|#x[0-9a-f]{1,6});')
 
 #Выключает компьютер: работает на Windows и Linux.
@@ -67,8 +66,35 @@ def PrintProgress(String, Current, Total):
 def RemoveArgumentsFromURL(URL):
 	return str(URL).split('?')[0]
 
+# Усекает число до определённого количества знаков после запятой.
+def ToFixedFloat(FloatNumber, Digits = 0):
+    return float(f"{FloatNumber:.{Digits}f}")
+
+# Проевращает число секунд в строку-дескриптор времени по формату [<x> hours <y> minuts <z> seconds].
+def SecondsToTimeString(Seconds):
+	# Количество часов.
+	Hours = int(Seconds / 3600.0)
+	Seconds -= Hours * 3600
+	# Количество минут.
+	Minutes = int(Seconds / 60.0)
+	Seconds -= Minutes * 60
+	# Количество секунд.
+	Seconds = ToFixedFloat(Seconds, 2)
+	# Строка-дескриптор времени.
+	TimeString = ""
+
+	# Генерация строки.
+	if Hours > 0:
+		TimeString += str(Hours) + " hours "
+	if Minutes > 0:
+		TimeString += str(Minutes) + " minutes "
+	if Seconds > 0:
+		TimeString += str(Seconds) + " seconds"
+
+	return TimeString
+
 #==========================================================================================#
-#=== ПАРСИНГ ГЛАВ ===#
+# >>>>> ПАРСИНГ ТАЙТЛА <<<<< #
 #==========================================================================================#
 
 #Проверяет ветвь на пустоту.
@@ -221,16 +247,20 @@ def PrepareToParcingChapters(Browser, Settings, MangaName, True_BranchID):
 		if ChaptersSpoilerButton[1].is_displayed():
 			ChaptersSpoilerButton[1].click()
 	
-#Получение списка названий глав.
+# Получает список названий глав.
+# Примечание: предварительно вызвать PrepareToParcingChapters.
 def GetChaptersNames(Browser):
+	# HTML-код страницы после полной загрузки.
 	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
+	# Парсинг HTML-кода страницы.
 	Soup = BeautifulSoup(BodyHTML, "lxml")
-	ChaptersNames = Soup.find_all('a', {'class': 'menu__item'})
-	Bufer = []
-	for InObj in ChaptersNames:
-		Bufer.append(RemoveSpaceSymbols(RemoveHTML(InObj)))
-	ChaptersNames = Bufer
-	Bufer = []
+	# Поиск всех блоков с названиями глав.
+	ChaptersNames = Soup.find_all("a", {"class": "menu__item"})
+
+	# Для каждого блока главы удалить HTML-теги и пробелы.
+	for i in range(0, len(ChaptersNames)):
+		ChaptersNames[i] = RemoveSpaceSymbols(RemoveHTML(ChaptersNames[i]))
+
 	return ChaptersNames
 
 # Получает список ссылок на главы. 
@@ -431,6 +461,33 @@ def GetMangaSlidesUrlList(Browser, ChapterLink, Settings):
 
 	return ChapterData
 
+# Получение статуса тайтла.
+def GetMangaData_Status(Browser, Settings, MangaName):
+	# Переход на страницу с описанием тайтла, если таковой уже не выполнен.
+	if RemoveArgumentsFromURL(Browser.current_url) != Settings["domain"] + MangaName or "?section=info" not in Browser.current_url:
+		Browser.get(Settings["domain"] + MangaName + "?section=info")
+	# HTML-код страницы после полной загрузки.
+	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
+	# Парсинг HTML-кода страницы.
+	Soup = BeautifulSoup(BodyHTML, "lxml")
+	# Поиск блоков с данными о тайтле.
+	DescriptionBlocks = Soup.find_all("a", {"class": "media-info-list__item"})
+	# Статус произведения.
+	Status = "Неизвестен"
+	# Структура статуса для помещения в JSON.
+	StatusStruct = {}
+
+	# В каждом блоке данных о тайтле искать статус.
+	for InObj in DescriptionBlocks:
+		if "Статус перевода" in str(InObj):
+			Status = RemoveHTML(InObj).replace('\n', ' ').split()[2]
+
+	# Запись статуса.
+	StatusStruct["id"] = 0
+	StatusStruct["name"] = Status
+
+	return StatusStruct
+
 #Получение данных о манге и их сохранение в JSON.
 def GetMangaData(Browser, MangaName, Settings):
 	Browser.get(Settings["domain"] + MangaName + "?section=info")
@@ -474,7 +531,7 @@ def GetMangaData(Browser, MangaName, Settings):
 	PreStatus = Soup.find_all('a', {'class': 'media-info-list__item'})
 	Status = "Неизвестен"
 	for InObj in PreStatus:
-		if "Статус тайтла" in str(InObj):
+		if "Статус перевода" in str(InObj):
 			Status = RemoveHTML(InObj).replace('\n', ' ').split()[2]
 
 	Type = RemoveHTML(Soup.find('div', {'class': 'media-info-list__value'}).get_text())
@@ -616,11 +673,16 @@ def GetMangaData(Browser, MangaName, Settings):
 
 	return JSON
 
-#Возвращает структуру контента для помещения в JSON.
-def MakeContentData(ChaptersNames, ChaptersLinks, BID, Browser, Settings, ShowProgress):
+# Формирует структуру контента для помещения в JSON.
+def MakeContentData(Browser, Settings, ShowProgress, ChaptersNames, ChaptersLinks, True_BranchID):
+	# Реверс порядка названий глав и ссылок на главы.
 	ChaptersNames.reverse()
 	ChaptersLinks.reverse()
+	# Контейнер ветви контента.
 	ContentDataBranch = []
+	# Строка запроса нужной ветви перевода.
+	QueryBranch = ""
+	# Структура главы.
 	ChapterData = {
 		"id": 0,
 		"tome": 0,
@@ -635,41 +697,54 @@ def MakeContentData(ChaptersNames, ChaptersLinks, BID, Browser, Settings, ShowPr
 		"price": None,
 		"pub_date": None,
 		"publishers": [],
-		"index": 1,
+		"index": 0,
 		"volume_id": None,
 		"slides": []
 		}
-	IsBID = ""
-	if BID == "":
-		IsBID = "none"
-	else:
-		IsBID = BID.split('=')[-1]
 
+	# Если не передан истинный BranchID, то заполнить его сообщением, иначе сформировать строку запроса.
+	if True_BranchID == "":
+		True_BranchID = "none"
+	else:
+		QueryBranch = "?bid=" + True_BranchID
+
+	# Для каждой главы сформировать структуру, заполнить её данными и поместить в контейнер.
 	for i in range(0, len(ChaptersNames)):
+		# Буфернная структура главы.
 		ChapterDataBufer = dict(ChapterData)
+		# Полное название главы с сайта, разбитое по пробелам.
 		ChapterNameData = ChaptersNames[i].split(' ')
 
+		# Вывести прогресс процесса.
+		PrintProgress(ShowProgress + "Branch ID: " + True_BranchID + ". Parcing chapters: ", str(i + 1), str(len(ChaptersLinks)))
+
+		# Переключение между старым и новым режимами получения слайдов главы.
+		if Settings["old-slide-receiving-mode"] == True:
+			ChapterDataBufer["slides"] = deprecated_GetMangaSlidesUrlArray(Browser, ChaptersLinks[i] + QueryBranch, Settings)
+		else:
+			ChapterDataBufer["slides"] = GetMangaSlidesUrlList(Browser, ChaptersLinks[i] + QueryBranch, Settings)
+		
+		# Номер тома (целочисленный тип данных).
 		ChapterDataBufer["tome"] = int(ChapterNameData[1])
+		# Номер главы (строковый тип данных).
 		ChapterDataBufer["chapter"] = ChapterNameData[3]
+		# Название главы: если есть, то записать его, иначе оставить поле пустым.
 		if len(ChapterNameData) > 4:
 			ChapterDataBufer["name"] = RemoveSpaceSymbols(ChaptersNames[i].split('-')[-1])
 		else:
 			ChapterDataBufer["name"] = ""
+		# Индекс главы.
 		ChapterDataBufer["index"] = i + 1
-		PrintProgress(ShowProgress + "Branch ID: " + IsBID + ". Parcing chapters: ", str(i + 1), str(len(ChaptersLinks)))
+		# ID главы на сайте.
 		ChapterDataBufer["id"] = GetChapterID(Browser)
-		# Переключение между старым и новым режимами получения слайдов главы.
-		if Settings["old-slide-receiving-mode"] == True:
-			ChapterDataBufer["slides"] = deprecated_GetMangaSlidesUrlArray(Browser, ChaptersLinks[i] + BID, Settings)
-		else:
-			ChapterDataBufer["slides"] = GetMangaSlidesUrlList(Browser, ChaptersLinks[i] + BID, Settings)
 
+		# Помещение буферной структуры в контейнер.
 		ContentDataBranch.append(ChapterDataBufer)
 
 	return ContentDataBranch
 
 #==========================================================================================#
-#=== ОБНОВЛЕНИЕ ТАЙТЛА ===#
+# >>>>> ОБНОВЛЕНИЕ ТАЙТЛА <<<<< #
 #==========================================================================================#
 
 # Получение из JSON тайтла списка синтетических ID ветвей.
