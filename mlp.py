@@ -8,10 +8,12 @@ from selenium.webdriver import Chrome
 import datetime
 import logging
 import json
+import time
 import sys
 import os
 
 from BaseFunctions import SignInAndDisableWarning
+from BaseFunctions import SecondsToTimeString
 from BaseFunctions import GetSynt_BranchID
 from BaseFunctions import Shutdown
 from BaseFunctions import Cls
@@ -21,17 +23,23 @@ from Components import UpdateTitle
 from Components import ParceTitle
 from Components import ScanTitles
 
+#==========================================================================================#
 # >>>>> ИНИЦИАЛИЗАЦИЯ ЛОГОВ <<<<< #
+#==========================================================================================#
 
 # Получение текущей даты.
-CurrentTime = datetime.datetime.now()
+CurrentDate = datetime.datetime.now()
+# Время запуска скрипта.
+StartTime = time.time()
 # Формирование пути к файлу лога.
-LogFilename = "Logs\\" + str(CurrentTime)[:-7] + ".log"
+LogFilename = "Logs\\" + str(CurrentDate)[:-7] + ".log"
 LogFilename = LogFilename.replace(':', '-')
 # Установка конфигнурации.
-logging.basicConfig(filename = LogFilename, level = logging.INFO)
+logging.basicConfig(filename = LogFilename, encoding="utf-8", level = logging.INFO)
 
+#==========================================================================================#
 # >>>>> ОТКРЫТИЕ БРАУЗЕРА <<<<< #
+#==========================================================================================#
 
 # Установка параметров работы браузера: отключение вывода логов в консоль, отключение аппаратного ускорения.
 BrowserOptions = Options()
@@ -44,10 +52,14 @@ Cls()
 # Установка размера окна браузера на FullHD для корректной работы сайтов.
 Browser.set_window_size(1920, 1080)
 
+#==========================================================================================#
 # >>>>> ЧТЕНИЕ НАСТРОЕК <<<<< #
+#==========================================================================================#
 
 # Вывод в лог заголовка: подготовка скрипта к работе.
 logging.info("====== Prepare to starting ======")
+# Запись времени начала работы скрипта.
+logging.info("Script started at " + str(CurrentDate)[:-7] + ".")
 # Инициализация хранилища настроек со стадартными значениями.
 Settings = {
 	"domain": "mangalib",
@@ -97,7 +109,9 @@ except EnvironmentError:
 	# Запись в лог ошибки о невозможности открытия файла настроек.
 	logging.error("Unable to open \"Settings.json\". All options set as default.")
 
+#==========================================================================================#
 # >>>>> ОБРАБОТКА СПЕЦИАЛЬНЫХ ФЛАГОВ <<<<< #
+#==========================================================================================#
 
 # Активна ли опция выключения компьютера по завершении работы парсера.
 IsShutdowAfterEnd = False
@@ -131,7 +145,9 @@ if "-s" in sys.argv:
 	# Установка сообщения для внутренних функций.
 	InFuncMessage_Shutdown = "Computer will be turned off after the parser is finished!\n"
 
+#==========================================================================================#
 # >>>>> ОБРАБОТКА ОСНОВНЫХ КОММАНД <<<<< #
+#==========================================================================================#
 
 # Двухкомпонентные команды: parce, update, getsl, ubid.
 if len(sys.argv) >= 3:
@@ -215,7 +231,7 @@ if len(sys.argv) >= 3:
 			# Установка алиаса тайтла из аргументов команды.
 			MangaName = sys.argv[2]
 			# Генерация сообщения для внутренних функций о прогрессе выполнения.
-			InFuncMessage_Progress += InFuncMessage_Shutdown + "Updating title \"" + MangaName + "\"...\n"
+			InFuncMessage_Progress = InFuncMessage_Shutdown + "Updating title \"" + MangaName + "\"...\n"
 			# Обновление тайтла.
 			UpdateTitle(Browser, Settings, MangaName, "")
 
@@ -251,15 +267,23 @@ elif len(sys.argv) >= 2:
 elif len(sys.argv) == 1:
 	logging.error("Not enough arguments.")
 
+#==========================================================================================#
 # >>>>> ЗАВЕРШЕНИЕ РАБОТЫ СКРИПТА <<<<< #
+#==========================================================================================#
 
 # Закрытие браузера.
 Browser.close()
 # Очистка консоли.
 Cls()
 
+# Время завершения работы скрипта.
+EndTime = time.time()
+# Запись времени завершения работы скрипта.
+logging.info("Script finished at " + str(datetime.datetime.now())[:-7] + ". Execution time: " + SecondsToTimeString(EndTime - StartTime) + ".")
+
 # Выключение ПК, если установлен соответствующий флаг.
 if IsShutdowAfterEnd == True:
-	Shutdown()
 	# Запись в лог сообщения о немедленном выключении ПК.
-	logging.info("Shutdowning the computer.")
+	logging.info("Turning off the computer.")
+	# Выключение ПК.
+	Shutdown()
