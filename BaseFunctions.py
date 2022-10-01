@@ -1,5 +1,7 @@
+from random_user_agent.params import SoftwareName, OperatingSystem
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+from random_user_agent.user_agent import UserAgent
 from selenium.webdriver.common.by import By
 from bs4 import BeautifulSoup
 from sys import platform
@@ -20,32 +22,36 @@ import os
 # Регулярное выражение фильтрации тегов HTML.
 TagsHTML = re.compile('<.*?>|&([a-z0-9]+|#[0-9]{1,6}|#x[0-9a-f]{1,6});')
 
-#Выключает компьютер: работает на Windows и Linux.
+# Выключает ПК: работает на Windows и Linux.
 def Shutdown():
 	if platform == "linux" or platform == "linux2":
 		os.system('sudo shutdown now')
 	elif platform == "win32":
 		os.system("shutdown /s")
 
-#Удаляет теги HTML из строки.
+# Удаляет теги HTML из строки.
 def RemoveHTML(TextHTML):
   CleanText = re.sub(TagsHTML, '', str(TextHTML))
+
   return str(CleanText)
 
-#Удаляет из строки символы: новой строки, табуляции, пробелы из начала и конца.
+# Удаляет из строки символы: новой строки, табуляции, пробелы из начала и конца.
 def RemoveSpaceSymbols(Text):
     Text = Text.replace('\n', '')
     Text = Text.replace('\t', '')
     Text = ' '.join(Text.split())
+
     return Text.strip()
 
-#Заменяет символ новой строки на запятую с пробелом.
+# Заменяет символ новой строки на запятую с пробелом.
 def ReplaceEndlToComma(Text):
     Text = Text.strip()
     Text = Text.replace('\n', ', ')
+
     return Text
 
-#Преобразует литеральное число в int.
+# Преобразует литеральное число в int.
+# Примечание: используется только для вычисления количества оценок.
 def LiteralToInt(String):
     if String.isdigit():
         return int(String)
@@ -53,16 +59,16 @@ def LiteralToInt(String):
         Number = float(String[:-1]) * 1000
     return int(Number)
 
-#Очищает консоль.
+# Очищает консоль.
 def Cls():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-#Выводит прогресс процесса.
+# Выводит прогресс процесса.
 def PrintProgress(String, Current, Total):
 	Cls()
 	print(String, " ", Current, " / ", Total)
 
-#Удаляет аргументы из URL.
+# Удаляет запросы из URL.
 def RemoveArgumentsFromURL(URL):
 	return str(URL).split('?')[0]
 
@@ -93,39 +99,65 @@ def SecondsToTimeString(Seconds):
 
 	return TimeString
 
+# Возвращает случайное значение заголовка User-Agent.
+def GetRandomUserAgent():
+	SoftwareNames = [SoftwareName.CHROME.value]
+	OperatingSystems = [OperatingSystem.WINDOWS.value, OperatingSystem.LINUX.value]   
+	UserAgentRotator = UserAgent(software_names = SoftwareNames, operating_systems = OperatingSystems, limit = 100)
+
+	return UserAgentRotator.get_random_user_agent()
+
 #==========================================================================================#
 # >>>>> ПАРСИНГ ТАЙТЛА <<<<< #
 #==========================================================================================#
 
-#Проверяет ветвь на пустоту.
-def CheckBranchForEmpty(Browser, BIDs, Index, MangaName, Settings):
-	if BIDs != None:
-		Browser.get(Settings["domain"] + MangaName + "?bid=" + BIDs[Index])
+# Проверяет ветвь на пустоту.
+def CheckBranchOnSiteForEmpty(Browser, Settings, MangaName, True_BranchID):
+	# Перейти на страницу ветви перевода.
+	if True_BranchID != "":
+		Browser.get(Settings["domain"] + MangaName + "?bid=" + True_BranchID + "&section=chapters")
+	else:
+		Browser.get(Settings["domain"] + MangaName + "?section=chapters")
+
+	# HTML-код страницы после полной загрузки.
 	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
+	# Парсинг HTML-кода страницы.
 	Soup = BeautifulSoup(BodyHTML, "lxml")
+	# Поиск блока с уведомлением о пустоте ветви.
 	SmallSoup = str(Soup.find("div", {"class": "empty"}))
+
+	# Проверить наличие сообщения о пустоте ветви.
 	if "Здесь пока нет глав" in SmallSoup:
 		return True
 	else:
 		return False
 
-#Выполнение, если указано настройками, входа на сайт и отключение уведомления о возрастном ограничении.
+# Выполнение, если указано настройками, входа на сайт и отключение уведомления о возрастном ограничении.
 def SignInAndDisableWarning(Browser, Settings):
+	# Если включён вход на сайт.
 	if Settings["sign-in"] == True:
+		# Проверка присутствия логина и пароля.
 		if Settings["email"] != "" and Settings["password"] != "":
+			# Вход на сайт.
 			LogIn(Browser, Settings)
+			# Запись в лог сообщения об успешном входе.
 			logging.info("Sign in as \"" + Settings["email"] + "\".")
 		else:
+			# Вывод в лог ошибки: некорректные данные пользователя.
 			logging.error("Uncorrect user data! Check \"Settings.json\".")
 
+	# Если включено отключение уведомления о возрастном ограничении.
 	if Settings["disable-age-limit-warning"] == True:
+		# Отключить уведомление.
 		DisableAgeLimitWarning(Browser, Settings)
+		# Запись в лог сообщения об отключении уведомления.
 		logging.info("Age limit warning disabled.")
 
-#Возвращает результат проверки: платный ли тайтл.
+#Возвращает результат проверки тайтла на платность.
 def IsMangaPaid(Browser, MangaName, Settings):
 	#Проверка нахождения на нужной странице.
 	URLinfo = Settings["domain"] + MangaName + "?section=info"
+
 	if Browser.current_url != URLinfo:
 		Browser.get(URLinfo)
 
@@ -397,8 +429,12 @@ def GetMangaSlidesUrlList(Browser, ChapterLink, Settings):
 			SlideW = None
 			# Высота текущего слайда.
 			SlideH = None
+			# Формирование заголовков запроса.
+			RequestHeaders = {}
+			RequestHeaders["referer"] = Settings["domain"][:-1] + ChapterLink
+			RequestHeaders["user-agent"] = GetRandomUserAgent()
 			# Проверка успешности запроса на получение слайда.
-			Request = requests.get(SlidesLinks[i], headers = {"referer": Settings["domain"][:-1] + ChapterLink}, stream = True)
+			Request = requests.get(SlidesLinks[i], headers = RequestHeaders, stream = True)
 			# Обработка статуса запроса.
 			if Request.status_code == 200:
 				# Получение необработанного слайда.
@@ -463,7 +499,7 @@ def GetMangaSlidesUrlList(Browser, ChapterLink, Settings):
 
 # Получение статуса тайтла.
 def GetMangaData_Status(Browser, Settings, MangaName):
-	# Переход на страницу с описанием тайтла, если таковой уже не выполнен.
+	# Переход на страницу с описанием тайтла, если таковой ещё не выполнен.
 	if RemoveArgumentsFromURL(Browser.current_url) != Settings["domain"] + MangaName or "?section=info" not in Browser.current_url:
 		Browser.get(Settings["domain"] + MangaName + "?section=info")
 	# HTML-код страницы после полной загрузки.
@@ -487,6 +523,49 @@ def GetMangaData_Status(Browser, Settings, MangaName):
 	StatusStruct["name"] = Status
 
 	return StatusStruct
+
+# Получение серий тайтла.
+def GetMangaData_Series(Browser, Settings, MangaName):
+	# Переход на страницу с описанием тайтла, если таковой ещё не выполнен.
+	if RemoveArgumentsFromURL(Browser.current_url) != Settings["domain"] + MangaName or "?section=info" not in Browser.current_url:
+		Browser.get(Settings["domain"] + MangaName + "?section=info")
+	# HTML-код страницы после полной загрузки.
+	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
+	# Парсинг HTML-кода страницы.
+	Soup = BeautifulSoup(BodyHTML, "lxml")
+	# Поиск блоков с данными о тайтле.
+	DescriptionBlocks = Soup.find_all("div", {"class": "media-info-list__item"})
+	# Ссылки на серии.
+	SeriesLinks = []
+	# Названия серий.
+	SeriesNames = []
+	# Алиасы серий.
+	SeriesSlugs = []
+	# Структура контейнера ссылок для помещения в JSON.
+	SeriesContainer = []
+
+	# В каждом блоке данных о тайтле искать серии.
+	for InObj in DescriptionBlocks:
+		if "Серия" in str(InObj):
+			# Парсинг блока с сериями.
+			SmallSoup = BeautifulSoup(str(InObj), "lxml")
+			# Поиск всех ссылок.
+			SeriesLinks = SmallSoup.find_all("a")
+
+	# Для каждой ссылки сформировать найти название и алиас.
+	for InObj in SeriesLinks:
+		SeriesNames.append(RemoveHTML(InObj))
+		SeriesSlugs.append(InObj["href"].split('/')[-1])
+
+	# Заполнение контейнера.
+	for i in range(0, len(SeriesLinks)):
+		BuferStruct = {}
+		BuferStruct["name"] = SeriesNames[i]
+		BuferStruct["slug"] = SeriesSlugs[i]
+
+		SeriesContainer.append(BuferStruct)
+
+	return SeriesContainer
 
 #Получение данных о манге и их сохранение в JSON.
 def GetMangaData(Browser, MangaName, Settings):
@@ -556,6 +635,8 @@ def GetMangaData(Browser, MangaName, Settings):
 		Bufer['id'] = 0
 		Bufer['name'] = str(InObj)
 		TagsArray.append(Bufer)
+
+	Series = GetMangaData_Series(Browser, Settings, MangaName)
    
 	PrePublishers = Soup.find_all('div', {'class': 'media-section media-section_teams'})
 	SmallSoup = BeautifulSoup(str(PrePublishers), "lxml")
@@ -655,6 +736,7 @@ def GetMangaData(Browser, MangaName, Settings):
 		},
 		"genres": GenresArray,
 		"categories": TagsArray,
+		"series": Series,
 		"publishers": Publishers,
 		"bookmark_type": None,
 		"branches": Branches,

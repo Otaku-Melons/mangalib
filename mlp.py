@@ -4,6 +4,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver import Chrome
+from time import sleep
 
 import datetime
 import logging
@@ -89,12 +90,17 @@ try:
 
 				# Если директория загрузки не установлена, задать значение по умолчанию.
 				if Settings["directory"] == "":
-					Settings["directory"] = "manga"
+					# Установка директории по умолчанию на основе домена.
+					Settings["directory"] = Settings["domain"].replace("lib", "")
 					# Запись в лог сообщения об установке стандартной директории загрузки.
 					logging.info("Save directory set as default.")
 				else:
 					# Запись в лог сообщения об установке директории загрузки.
 					logging.info("Save directory set as " + Settings["directory"] + ".")
+
+				# Если директория не существует, тогда создать её.
+				if os.path.exists(Settings["directory"]) == False:
+						os.makedirs(Settings["directory"])
 
 				# Преобразование названия домена в URL целевого сайта.
 				Settings["domain"] = "https://" + Settings["domain"] + ".me/"
@@ -149,7 +155,7 @@ if "-s" in sys.argv:
 # >>>>> ОБРАБОТКА ОСНОВНЫХ КОММАНД <<<<< #
 #==========================================================================================#
 
-# Двухкомпонентные команды: parce, update, getsl, ubid.
+# Двухкомпонентные команды: parce, update, getsl, ubid, scan.
 if len(sys.argv) >= 3:
 	# Вход на сайт и отключение уведомления о возрастном ограничении согласно настройкам.
 	SignInAndDisableWarning(Browser, Settings)
@@ -199,7 +205,7 @@ if len(sys.argv) >= 3:
 			ParceTitle(Browser, MangaName, Settings, ShowProgress = InFuncMessage_Shutdown + InFuncMessage_ForceMode, ForceMode = IsForceModeActivated)
 
 	# Обновление JSON тайтлов.
-	if sys.argv[1] == "update":
+	elif sys.argv[1] == "update":
 		# Вывод в лог заголовка: обновление.
 		logging.info("====== Updating ======")
 
@@ -223,9 +229,11 @@ if len(sys.argv) >= 3:
 				# Сообщение для внутренних функций: прогресс выполнения.
 				InFuncMessage_Progress = ""
 				# Генерация сообщения для внутренних функций о прогрессе выполнения.
-				InFuncMessage_Progress += InFuncMessage_Shutdown + "Updating titles: " + str(i + 1) + " / " + str(len(FilesList)) + "\n"
+				InFuncMessage_Progress += InFuncMessage_Shutdown + "Updating titles: " + str(i + 1) + " / " + str(len(FilesList))
 				# Парсинг тайтла.
 				UpdateTitle(Browser, Settings, MangaName, InFuncMessage_Progress)
+				# Выдерживание интервала перехода между тайтлами.
+				sleep(Settings["delay"])
 
 		else:
 			# Установка алиаса тайтла из аргументов команды.
@@ -251,17 +259,18 @@ if len(sys.argv) >= 3:
 		# Сохранение информации о слайдах конкретной главы в Slides.json.
 		GetChapterSlidesInJSON(Browser, sys.argv[2], Settings)
 
-# Однокомпонентные команды: scan.
-elif len(sys.argv) >= 2:
-
 	# Запись всех алиасов на странице каталога сайта (поддерживает фильтры).
-	if sys.argv[1] == "scan":
+	elif sys.argv[1] == "scan":
 		# Вывод в лог заголовка: другие методы.
 		logging.info("====== Other ======")
 		# Запись в лог сообщения о начале сканирования страницы каталога.
 		logging.info("Scanning site on: \"" + Settings["scan-target"] + "\"...")
-		# Сканирование страницы каталога и запись результата в Manifest.json.
-		ScanTitles(Browser, Settings)
+
+		# Переключение между режимами передачи аргумента.
+		if "-target" in sys.argv:
+			ScanTitles(Browser, Settings, None)
+		else:
+			ScanTitles(Browser, Settings, sys.argv[2])
 
 # Обработка исключения: недостаточно аргументов.
 elif len(sys.argv) == 1:
@@ -287,3 +296,10 @@ if IsShutdowAfterEnd == True:
 	logging.info("Turning off the computer.")
 	# Выключение ПК.
 	Shutdown()
+
+# Выключение логгирования.
+logging.shutdown()
+
+# Удаление лога, если в процессе работы скрипта не проводился парсинг или обновление, а также указано настройками.
+if "parce" not in sys.argv and "update" not in sys.argv and Settings["logs-cleanup"] == True:
+	os.remove(LogFilename)

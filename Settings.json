@@ -9,5 +9,6 @@
     "delay": 5,
     "getting-slide-sizes": false,
     "old-slide-receiving-mode": false,
-    "server": "compress"
+    "server": "compress",
+    "logs-cleanup": true
 }
