@@ -105,7 +105,7 @@ def GetRandomUserAgent():
 	OperatingSystems = [OperatingSystem.WINDOWS.value, OperatingSystem.LINUX.value]   
 	UserAgentRotator = UserAgent(software_names = SoftwareNames, operating_systems = OperatingSystems, limit = 100)
 
-	return UserAgentRotator.get_random_user_agent()
+	return str(UserAgentRotator.get_random_user_agent()).strip('"')
 
 #==========================================================================================#
 # >>>>> ПАРСИНГ ТАЙТЛА <<<<< #
@@ -408,6 +408,11 @@ def GetMangaSlidesUrlList(Browser, ChapterLink, Settings):
 	StorageLink = SiteWindowInfo["servers"][Settings["server"]]
 	# Получение алиаса главы на сервере-хранилище.
 	ChapterSlug = SiteWindowInfo["img"]["url"]
+	# Формирование заголовков запроса.
+	RequestHeaders = {}
+	RequestHeaders["referer"] = Settings["domain"]
+	RequestHeaders["user-agent"] = GetRandomUserAgent()
+	logging.info("User-Agent for request: " + RequestHeaders["user-agent"])
 	# Список URL слайдов.
 	SlidesLinks = []
 
@@ -429,10 +434,6 @@ def GetMangaSlidesUrlList(Browser, ChapterLink, Settings):
 			SlideW = None
 			# Высота текущего слайда.
 			SlideH = None
-			# Формирование заголовков запроса.
-			RequestHeaders = {}
-			RequestHeaders["referer"] = Settings["domain"][:-1] + ChapterLink
-			RequestHeaders["user-agent"] = GetRandomUserAgent()
 			# Проверка успешности запроса на получение слайда.
 			Request = requests.get(SlidesLinks[i], headers = RequestHeaders, stream = True)
 			# Обработка статуса запроса.

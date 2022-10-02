@@ -51,16 +51,20 @@ def ParceTitle(Browser, MangaName, Settings, ShowProgress, ForceMode):
 		#Проверка лицензии.
 		if JSON['is_licensed'] == False and IsPaid == False:
 			#Получение BID веток.
-			BIDs = [""]
+			BIDs = None
 			if BranchesCount > 1:
 				BIDs = GetBranchesID(Browser, MangaName, Settings)
 			logging.info("Parcing: \"" + MangaName + "\". Branches count: " + str(BranchesCount) + ".")
 			#Если не лицензировано, парсить каждую ветку.
 			for i in range(0, len(JSON["branches"])):
-				BID = ""
+				BID = None
+				if BIDs == None:
+					BID = ""
+				else:
+					BID = BIDs[i]
 				BIDlog = "none"
 				#Проверка ветви на пустоту.
-				if CheckBranchOnSiteForEmpty(Browser, Settings, MangaName, BIDs[i]) == False:
+				if CheckBranchOnSiteForEmpty(Browser, Settings, MangaName, BID) == False:
 					#Если существует только одна ветвь перевода.
 					if BIDs is None:
 						PrepareToParcingChapters(Browser, Settings, MangaName, BIDs)
