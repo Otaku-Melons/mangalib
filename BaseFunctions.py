@@ -461,8 +461,6 @@ def GetMangaSlidesUrlList(Browser, ChapterLink, Settings):
 			else:
 				# Инкремент количества неполученных слайдов.
 				SlidesErrors += 1
-				# Запись в лог User-Agent (Debug для ошибок протокола SSL).
-				logging.warning("Chapter: \"" + ChapterLink + "\" parcing. Failed to request \"" + SlidesLinks[i] + "\".")
 				# Запись в лог ошибки получения слайда с сервера.
 				logging.warning("Chapter: \"" + ChapterLink + "\" parcing. Failed to request \"" + SlidesLinks[i] + "\".")
 
