@@ -412,7 +412,8 @@ def GetMangaSlidesUrlList(Browser, ChapterLink, Settings):
 	RequestHeaders = {}
 	RequestHeaders["referer"] = Settings["domain"]
 	RequestHeaders["user-agent"] = GetRandomUserAgent()
-	logging.info("User-Agent for request: " + RequestHeaders["user-agent"])
+	# Запись в лог используемого для главы User-Agent.
+	logging.debug("User-Agent for request: " + RequestHeaders["user-agent"])
 	# Список URL слайдов.
 	SlidesLinks = []
 
@@ -460,6 +461,8 @@ def GetMangaSlidesUrlList(Browser, ChapterLink, Settings):
 			else:
 				# Инкремент количества неполученных слайдов.
 				SlidesErrors += 1
+				# Запись в лог User-Agent (Debug для ошибок протокола SSL).
+				logging.warning("Chapter: \"" + ChapterLink + "\" parcing. Failed to request \"" + SlidesLinks[i] + "\".")
 				# Запись в лог ошибки получения слайда с сервера.
 				logging.warning("Chapter: \"" + ChapterLink + "\" parcing. Failed to request \"" + SlidesLinks[i] + "\".")
 
