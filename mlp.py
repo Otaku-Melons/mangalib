@@ -42,12 +42,16 @@ logging.basicConfig(filename = LogFilename, encoding="utf-8", level = logging.IN
 # >>>>> ОТКРЫТИЕ БРАУЗЕРА <<<<< #
 #==========================================================================================#
 
+# Расположении папки установки веб-драйвера в директории скрипта.
+os.environ["WDM_LOCAL"] = "1"
 # Установка параметров работы браузера: отключение вывода логов в консоль, отключение аппаратного ускорения.
 BrowserOptions = Options()
 BrowserOptions.add_argument("--log-level=3")
 BrowserOptions.add_argument("--disable-gpu")
 # Загрузка веб-драйвера и установка его в качестве используемого модуля.
 Browser = Chrome(service = Service(ChromeDriverManager().install()), options = BrowserOptions)
+# Очистка куков перед запуском (предположительный фикс бага авторизации).
+Browser.delete_all_cookies()
 # Очистка консоли от данных о сессии.
 Cls()
 # Установка размера окна браузера на FullHD для корректной работы сайтов.
