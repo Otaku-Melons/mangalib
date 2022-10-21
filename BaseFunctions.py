@@ -4,6 +4,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from random_user_agent.user_agent import UserAgent
 from selenium.webdriver.common.by import By
 from bs4 import BeautifulSoup
+from PIL import ImageFile
 from sys import platform
 from time import sleep
 from PIL import Image
@@ -217,15 +218,20 @@ def GetPublisherData(Div, Domain):
     Bufer['type'] = 'Переводчик'
     return Bufer
 
-#Отключить уведомление о возрастном ограничении.
+# Отключает уведомление о возрастном ограничении.
 def DisableAgeLimitWarning(Browser, Settings):
+	# Переключение между способами отключения уведомления в зависимости от домена.
 	if Settings["domain"] == "https://mangalib.me/":
 		Browser.get("https://mangalib.me/kimetsu-no-yaiba/v1/c1?page=1")
+
 	elif Settings["domain"] == "https://hentailib.me/": 
-		Browser.get("https://hentailib.me/oh-sheet-shadman/v1/c1?page=1")
+		# Поиск последней добавленной на сайт главы и переход к ней кликом по ссылке.
+		Browser.find_elements(By.CLASS_NAME, "updates__chapter")[0].click()
+
 	elif Settings["domain"] == "https://yaoilib.me/": 
 		Browser.get("https://yaoilib.me/you-are-here/v1/c151?page=1")
-
+	
+	# Поиск и нажатие на кнопку сокрытия уведомления.
 	Browser.find_elements(By.CLASS_NAME, "control__text")[-1].click()
 	Browser.find_element(By.CLASS_NAME, 'reader-caution-continue').click()
 
@@ -315,85 +321,6 @@ def GetChaptersLinks(Browser):
 	
 	return ChaptersLinks
 
-#Возвращает список URL слайдов (компонент deprecated_GetMangaSlidesUrlArray).
-def GetSlides(Browser, FirstPage, FramesCount, Settings, ChapterLink):
-	if Browser.current_url != FirstPage:
-		Browser.get(FirstPage)
-		logging.warning("Chapter: \"" + ChapterLink + "\". Restoring chapter...")
-	sleep(Settings["delay"])
-	#Получение ссылок на кадры главы.
-	for i in range(0, int(FramesCount) - 1):
-		#Проверка полной загрузки всех <img> на странице.
-		while Browser.execute_script('''
-        for (var img of document.getElementsByTagName("img")) {
-            if (img.complete != true) return false;
-        };
-        return true;    
-		''') == False:
-			sleep(1)
-		#Нажатие на слайд для перехода к следующему.
-		Browser.find_element(By.CLASS_NAME, 'reader-view__container').click()
-		#Пауза между перелистыванием для снижения нагрузки на сервер.
-		sleep(Settings["delay"])
-
-	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
-	Soup = BeautifulSoup(BodyHTML, "lxml")
-	SmallSoup = BeautifulSoup(str(Soup.find('div', {'class': 'reader-view__container'})), "html.parser")
-	FramesLinksArray = SmallSoup.find_all('img', {"src": True})
-	PreFrameLinks = []
-	for i in range(len(FramesLinksArray)):
-		PreFrameLinks.append(FramesLinksArray[i]['src'])
-
-	return PreFrameLinks
-
-#Получение списка ссылок на слайды манги и преобразование его в нужный формат.
-def deprecated_GetMangaSlidesUrlArray(Browser, ChapterLink, Settings):
-	Browser.get(Settings["domain"][:-1] + ChapterLink)
-	FirstPage = Browser.current_url
-	WebDriverWait(Browser, 60).until(EC.presence_of_element_located, (By.ID , "reader-pages"))
-	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
-	Soup = BeautifulSoup(BodyHTML, "lxml")
-	FramesCount = Soup.find('select', {'id': 'reader-pages'})
-	FramesCount = RemoveHTML(FramesCount)
-	FramesCount = FramesCount.split()[-1]
-	FramesLinks = GetSlides(Browser, FirstPage, FramesCount, Settings, ChapterLink)
-
-	#Проверка ошибки: получен URL не всех слайдов.
-	if len(FramesLinks) != int(FramesCount):
-		logging.warning("Chapter: \"" + ChapterLink + "\" parced with errors. Not all slides were received: " + str(len(FramesLinks)) + " / " + FramesCount + ".")
-		FramesLinks = GetSlides(Browser, FirstPage, FramesCount, Settings, ChapterLink)
-		if len(FramesLinks) != int(FramesCount):
-			logging.warning("Chapter: \"" + ChapterLink + "\" restoring failed. Not all slides were received: " + str(len(FramesLinks)) + " / " + FramesCount + ".")
-	else:
-		logging.info("Chapter: \"" + ChapterLink + "\" parced. Slides count: " + str(len(FramesLinks)) + ".")
-
-	FrameHeights = []
-	FrameWidths = []
-	for i in range(len(FramesLinks)):
-		FrameHeights.append(Browser.execute_script('''
-			var img = new Image();
-			img.src = arguments[0]
-			return img.height
-		''', FramesLinks[i]))
-
-	for i in range(len(FramesLinks)):
-		FrameWidths.append(Browser.execute_script('''
-			var img = new Image();
-			img.src = arguments[0]
-			return img.width
-		''', FramesLinks[i]))
-
-	ChapterData = []
-	
-	for i in range(len(FramesLinks)):
-		FrameData = dict()
-		FrameData["link"] = FramesLinks[i]
-		FrameData["width"] = FrameWidths[i]
-		FrameData["height"] = FrameHeights[i]
-		ChapterData.append(FrameData)
-
-	return ChapterData
-
 # Получает список слайдов главы из JS-данных страницы и определяет их размеры в пикселях.
 def GetMangaSlidesUrlList(Browser, ChapterLink, Settings):
 	# Переход на страницу главы.
@@ -408,6 +335,8 @@ def GetMangaSlidesUrlList(Browser, ChapterLink, Settings):
 	StorageLink = SiteWindowInfo["servers"][Settings["server"]]
 	# Получение алиаса главы на сервере-хранилище.
 	ChapterSlug = SiteWindowInfo["img"]["url"]
+	# Разрешить чтение усечённых файлов.
+	ImageFile.LOAD_TRUNCATED_IMAGES = True
 	# Формирование заголовков запроса.
 	RequestHeaders = {}
 	RequestHeaders["referer"] = Settings["domain"]
@@ -438,17 +367,15 @@ def GetMangaSlidesUrlList(Browser, ChapterLink, Settings):
 			# Проверка успешности запроса на получение слайда.
 			Request = requests.get(SlidesLinks[i], headers = RequestHeaders, stream = True)
 			# Обработка статуса запроса.
-			if Request.status_code == 200:
-				# Получение необработанного слайда.
-				SlideRequest = Request.raw
+			if Request.status_code == 200: 
 
 				# Попытка обработать слайд для получения размеров.
 				try:
 					# Открытие слайда из потока запроса.
-					Slide = Image.open(SlideRequest)
-					# Запись размеров слайда.
-					SlideW = Slide.width
-					SlideH = Slide.height
+					with Image.open(Request.raw) as Slide:
+						# Запись размеров слайда.
+						SlideW = Slide.width
+						SlideH = Slide.height
 
 				except PIL.UnidentifiedImageError:
 					# Запись в лог ошибки распознания слайда.
@@ -457,7 +384,7 @@ def GetMangaSlidesUrlList(Browser, ChapterLink, Settings):
 				except OSError:
 					# Запись в лог ошибки: усечённый файл.
 					logging.warning("Chapter: \"" + ChapterLink + "\" parcing. Truncated image \"" + SlidesLinks[i] + "\".")
-					
+
 			else:
 				# Инкремент количества неполученных слайдов.
 				SlidesErrors += 1
@@ -802,11 +729,8 @@ def MakeContentData(Browser, Settings, ShowProgress, ChaptersNames, ChaptersLink
 		# Вывести прогресс процесса.
 		PrintProgress(ShowProgress + "Branch ID: " + True_BranchID + ". Parcing chapters: ", str(i + 1), str(len(ChaptersLinks)))
 
-		# Переключение между старым и новым режимами получения слайдов главы.
-		if Settings["old-slide-receiving-mode"] == True:
-			ChapterDataBufer["slides"] = deprecated_GetMangaSlidesUrlArray(Browser, ChaptersLinks[i] + QueryBranch, Settings)
-		else:
-			ChapterDataBufer["slides"] = GetMangaSlidesUrlList(Browser, ChaptersLinks[i] + QueryBranch, Settings)
+		# Получение информации о слайдах.
+		ChapterDataBufer["slides"] = GetMangaSlidesUrlList(Browser, ChaptersLinks[i] + QueryBranch, Settings)
 		
 		# Номер тома (целочисленный тип данных).
 		ChapterDataBufer["tome"] = int(ChapterNameData[1])
@@ -921,11 +845,8 @@ def ParceChapter(Browser, Settings, ChapterFullLink, True_BranchID):
 	# Получение названия.
 	ChapterStruct["name"] = SiteWindowChaptersData[SiteWindowInfo["current"]["index"] - 1]["chapter_name"]
 
-	# Переключение между старым и новым режимами получения слайдов главы.
-	if Settings["old-slide-receiving-mode"] == True:
-		ChapterStruct["slides"] = deprecated_GetMangaSlidesUrlArray(Browser, ChapterFullLink.replace(Settings["domain"][:-1], "") + True_BranchID, Settings)
-	else:
-		ChapterStruct["slides"] = GetMangaSlidesUrlList(Browser, ChapterFullLink.replace(Settings["domain"][:-1], "") + True_BranchID, Settings)
+	# Получение информации о слайдах.
+	ChapterStruct["slides"] = GetMangaSlidesUrlList(Browser, ChapterFullLink.replace(Settings["domain"][:-1], "") + True_BranchID, Settings)
 
 	return ChapterStruct
 	
@@ -1005,3 +926,78 @@ def GetBranchesDescriptionStruct(Browser, Settings, MangaName, True_BranchesID):
 		BranchesStruct.append(BuferBranch)
 
 	return BranchesStruct
+
+#==========================================================================================#
+# >>>>> ИСПРАВЛЕНИЕ ТАЙТЛА <<<<< #
+#==========================================================================================#
+
+# Проверяет, содержит ли глава не полностью описанные слайды.
+def CheckChapterForNoneSlideSizes(Chapter):
+	# Список слайдов.
+	Slides = Chapter["slides"]
+
+	# Для каждого слайда проверить наличие размеров.
+	for i in range(0, len(Slides)):
+		if Slides[i]["width"] == None or Slides[i]["height"] == None:
+			return True
+
+	return False
+
+# Получение списка серверов с контентом.
+def GetContentServersList(Browser, Settings):
+	# Переход на главную страницу.
+	Browser.get(Settings["domain"][:-1])
+	# Ожидание появления ссылок на обновлённые главы.
+	WebDriverWait(Browser, 60).until(EC.visibility_of_element_located((By.CLASS_NAME, "updates__chapter")))
+	# Поиск последней добавленной на сайт главы и переход к ней кликом по ссылке.
+	Browser.find_elements(By.CLASS_NAME, "updates__chapter")[0].click()
+	# Получение JS инофрмации о странице.
+	SiteWindowInfo = Browser.execute_script("return window.__info;")
+
+	return SiteWindowInfo["servers"]
+
+# Строит алиас главы из описания.
+# Примечание: передать структуру главы из описания в JSON тайтла.
+def BuildChapterSlug(MangaName, Chapter):
+	return "/" + MangaName + "/v" + str(Chapter["tome"]) + "/c" + Chapter["chapter"]
+
+# Попытка дополнить информацию о слайдах.
+def AmendChapterSlides(Browser, Settings, Servers, TitleJSON, Chapter):
+	# Инвертированные названия серверов для порядка от нового к старому.
+	ServersNames = list(Servers.keys())
+	# Попытаться поставить в списке на исправление первым сервер, указанный в настройках.
+	if Settings["server"] in ServersNames:
+		ServersNames.remove(Settings["server"])
+		ServersNames.insert(0, Settings["server"])
+	# Ссылка на главу.
+	ChapterLink = BuildChapterSlug(TitleJSON["dir"], Chapter)
+	# Временное хранилище главы.
+	ChapterBufer = Chapter
+	# Копирование структуры настроек.
+	FakeSettings = Settings
+
+	# Получать слайды с сервера, пока не исчезнет ошибка.
+	for i in range(0, len(ServersNames)):
+		# Вывод сообщения в консоль о дополнении конкретного тайтла.
+		print("\nTrying to amend \"" + ChapterLink +  "\" with server: " + ServersNames[i])
+		# Запись нового сервера в имитацию настроек.
+		FakeSettings["server"] = ServersNames[i]
+		# Запись в лог сообщения о нахождении неполного описания главы.
+		logging.info("Amending: \"" + ChapterLink + "\". Not all slides have sizes in chapter: \"" + ChapterLink + "\". Sizing...")
+		# Получение информации о слайдах главы с заданного сервера.
+		ChapterBufer["slides"] = GetMangaSlidesUrlList(Browser, ChapterLink, FakeSettings)
+		# Если описание слайдов в порядке, то сохранить и вернуть его.
+		if CheckChapterForNoneSlideSizes(ChapterBufer) == False:
+			# Запись в лог сообщения о дополнении главы размерами слайдов.
+			logging.info("Amending: \"" + ChapterLink + "\". Chapter amended with server \"" + ServersNames[i] + "\".")
+			# Вывод сообщения в консоль о дополнении конкретного тайтла.
+			print("Chapter \"" + ChapterLink +  "\" amended successfully!")
+
+			return ChapterBufer
+
+	# Запись в лог сообщения о невозможности дополнить главу размерами слайдов.
+	logging.warning("Amending: \"" + ChapterLink + "\". Failed to amend chapter.")
+	# Вывод сообщения в консоль о дополнении конкретного тайтла.
+	print("Chapter \"" + ChapterLink +  "\" couldn't amended.")
+
+	return Chapter

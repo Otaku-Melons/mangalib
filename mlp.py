@@ -4,6 +4,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver import Chrome
+from PIL import ImageFile
 from time import sleep
 
 import datetime
@@ -14,6 +15,7 @@ import sys
 import os
 
 from BaseFunctions import SignInAndDisableWarning
+from BaseFunctions import GetContentServersList
 from BaseFunctions import SecondsToTimeString
 from BaseFunctions import GetSynt_BranchID
 from BaseFunctions import Shutdown
@@ -23,6 +25,7 @@ from Components import GetChapterSlidesInJSON
 from Components import UpdateTitle
 from Components import ParceTitle
 from Components import ScanTitles
+from Components import Amend
 
 #==========================================================================================#
 # >>>>> ИНИЦИАЛИЗАЦИЯ ЛОГОВ <<<<< #
@@ -44,10 +47,13 @@ logging.basicConfig(filename = LogFilename, encoding="utf-8", level = logging.IN
 
 # Расположении папки установки веб-драйвера в директории скрипта.
 os.environ["WDM_LOCAL"] = "1"
+# Разрешить чтение усечённых файлов.
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 # Установка параметров работы браузера: отключение вывода логов в консоль, отключение аппаратного ускорения.
 BrowserOptions = Options()
 BrowserOptions.add_argument("--log-level=3")
 BrowserOptions.add_argument("--disable-gpu")
+BrowserOptions.add_argument("--disable-blink-features=AutomationControlled")
 # Загрузка веб-драйвера и установка его в качестве используемого модуля.
 Browser = Chrome(service = Service(ChromeDriverManager().install()), options = BrowserOptions)
 # Очистка куков перед запуском (предположительный фикс бага авторизации).
@@ -76,7 +82,6 @@ Settings = {
     "password": "",
     "delay": 5,
     "getting-slide-sizes": False,
-    "old-slide-receiving-mode": False,
     "server": "main"
 }
 
@@ -247,6 +252,47 @@ if len(sys.argv) >= 3:
 			# Обновление тайтла.
 			UpdateTitle(Browser, Settings, MangaName, "")
 
+	# Попытка получить размер слайдов для описанных в JSON глав.
+	elif sys.argv[1] == "amend":
+		# Вывод в лог заголовка: другие методы.
+		logging.info("====== Amending ======")
+		# Список серверов с контентом.
+		Servers = GetContentServersList(Browser, Settings)
+
+		# Если вместо алиаса установлен флаг -all, начать дополнение всех слайдов всех глав из директории обработки, иначе провести дополнение по переданному алиасу.
+		if sys.argv[2] == "-all":
+			# Получение списка файлов в директории.
+			FilesList = os.listdir(Settings["directory"])
+			# Фильтрация только файлов формата JSON.
+			FilesList = list(filter(lambda x: x.endswith(".json"), FilesList))
+			# Уадление манифеста.
+			if "#Manifest.json" in FilesList:
+				FilesList.remove("#Manifest.json")
+			# Удаление файла с определениями слайдов.
+			if "#Slides.json" in FilesList:
+				FilesList.remove("#Slides.json")
+
+			# Дополнять каждый тайтл.
+			for i in range(0, len(FilesList)):
+				# Алиас манги.
+				MangaName = FilesList[i].replace(".json", "")
+				# Сообщение для внутренних функций: прогресс выполнения.
+				InFuncMessage_Progress = ""
+				# Генерация сообщения для внутренних функций о прогрессе выполнения.
+				InFuncMessage_Progress += InFuncMessage_Shutdown + "Amending titles: " + str(i + 1) + " / " + str(len(FilesList))
+				# Парсинг тайтла.
+				Amend(Browser, Settings, Servers, MangaName, InFuncMessage_Progress)
+				# Выдерживание интервала перехода между слайдами.
+				sleep(Settings["delay"])
+
+		else:
+			# Установка алиаса тайтла из аргументов команды.
+			MangaName = sys.argv[2]
+			# Генерация сообщения для внутренних функций о прогрессе выполнения.
+			InFuncMessage_Progress = InFuncMessage_Shutdown + "Amending title \"" + MangaName + "\"..."
+			# Исправление тайтла.
+			Amend(Browser, Settings, Servers, MangaName, InFuncMessage_Progress)
+
 	# Генерация синтетического BranchID алиаса.
 	elif sys.argv[1] == "ubid":
 		# Вывод в лог заголовка: другие методы.
@@ -305,5 +351,5 @@ if IsShutdowAfterEnd == True:
 logging.shutdown()
 
 # Удаление лога, если в процессе работы скрипта не проводился парсинг или обновление, а также указано настройками.
-if "parce" not in sys.argv and "update" not in sys.argv and Settings["logs-cleanup"] == True:
+if "parce" not in sys.argv and "update" not in sys.argv and "amend" not in sys.argv and Settings["logs-cleanup"] == True:
 	os.remove(LogFilename)

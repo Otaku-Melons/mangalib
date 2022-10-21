@@ -9,7 +9,6 @@ from BaseFunctions import RemoveArgumentsFromURL
 from BaseFunctions import Cls
 
 # >>>>> ПАРСИНГ ТАЙТЛА <<<<< #
-from BaseFunctions import deprecated_GetMangaSlidesUrlArray
 from BaseFunctions import CheckBranchOnSiteForEmpty
 from BaseFunctions import PrepareToParcingChapters
 from BaseFunctions import GetMangaSlidesUrlList
@@ -29,6 +28,10 @@ from BaseFunctions import GetBranchesIdFromJSON
 from BaseFunctions import TrueToSyntBranchID
 from BaseFunctions import BuildLinksFromJSON
 from BaseFunctions import ParceChapter
+
+# >>>>> ИСПРАВЛЕНИЕ ТАЙТЛА <<<<< #
+from BaseFunctions import CheckChapterForNoneSlideSizes
+from BaseFunctions import AmendChapterSlides
 
 #Парсинг тайтла.
 def ParceTitle(Browser, MangaName, Settings, ShowProgress, ForceMode):
@@ -397,11 +400,8 @@ def GetChapterSlidesInJSON(Browser, ChapterURL, Settings):
 	# Удаление запросов из URL.
 	ChapterURL = RemoveArgumentsFromURL(ChapterURL)
 
-	# Переключение между старым и новым режимами получения слайдов.
-	if Settings["old-slide-receiving-mode"] == True:
-		SlidesInfo = deprecated_GetMangaSlidesUrlArray(Browser, ChapterURL, Settings)
-	else:
-		SlidesInfo = GetMangaSlidesUrlList(Browser, ChapterURL, Settings)
+	# Получение информации о слайдах.
+	SlidesInfo = GetMangaSlidesUrlList(Browser, ChapterURL, Settings)
 
 	# Сохранение информации о слайдах.
 	with open(Settings["directory"] + "\\#Slides.json", "w", encoding = "utf-8") as FileWrite:
@@ -409,6 +409,53 @@ def GetChapterSlidesInJSON(Browser, ChapterURL, Settings):
 		# Запись в лог сообщения об успешном создании файла.
 		logging.info("Chapter slides info file was created. Completed.")
 
+# Дополнение глав тайтла размерами слайдов.
+def Amend(Browser, Settings, Servers, MangaName, InFuncMessage_Progress):
+	# Очистка содержимого консоли.
+	Cls()
+	# Вывод прогресса исправления.
+	print(InFuncMessage_Progress)
+
+	# Проверка доступности файла.
+	if os.path.exists(Settings["directory"] + "\\" + MangaName + ".json"):
+		# Открытие JSON тайтла.
+		with open(Settings["directory"] + "\\" + MangaName + ".json", encoding = "utf-8") as FileRead:
+			# JSON файл тайтла.
+			TitleJSON = json.load(FileRead)
+			# Провка ошибки парсинга JSON-формата.
+			if TitleJSON == None:
+				logging.error("Failed to read \"" + MangaName + ".json\".")
+			else:
+				# Получение списка синтетических ID ветвей из JSON.
+				Synt_BranchesID = GetBranchesIdFromJSON(TitleJSON)
+				# Количество неполных описаний слайдов.
+				SlidesBadDescriptionsCount = 0
+
+				# В каждой ветви искать слайд с неполным описанием.
+				for BranchIndex in range(0, len(Synt_BranchesID)):
+					# Проверить каждую главу.
+					for ChapterIndex in range(0, len(TitleJSON["content"][Synt_BranchesID[BranchIndex]])):
+						# Если глава не полностью описана, добавить её в список.
+						if CheckChapterForNoneSlideSizes(TitleJSON["content"][Synt_BranchesID[BranchIndex]][ChapterIndex]) == True:
+							# Сохранение исправленного описания главы.
+							TitleJSON["content"][Synt_BranchesID[BranchIndex]][ChapterIndex] = AmendChapterSlides(Browser, Settings, Servers, TitleJSON, TitleJSON["content"][Synt_BranchesID[BranchIndex]][ChapterIndex])
+							# Инкремент количества плохих описаний слайдов.
+							SlidesBadDescriptionsCount += 1
+
+				if SlidesBadDescriptionsCount > 0:
+					# Сохранение файла JSON.
+					with open(Settings["directory"] + "\\" + MangaName + ".json", "w", encoding = "utf-8") as FileWrite:
+						json.dump(TitleJSON, FileWrite, ensure_ascii = False, indent = 2, separators = (',', ': '))
+
+					# Запись в лог сообщения об успешном исправлении файла JSON.
+					logging.info("Amending: \"" + MangaName + "\". Completed. Chapters without slides sizes count: " + str(SlidesBadDescriptionsCount) + ".")
+
+				else:
+					# Запись в лог сообщения об успешном исправлении файла JSON.
+					logging.info("Amending: \"" + MangaName + "\". Completed. No partial chapters descriptions.")
+	else:
+		# Запись в лог сообщения об ошибке доступа к файлу.
+		logging.error("Failed to find \"" + Settings["directory"] + "\\" + MangaName + ".json" + "\".")
 
 
 

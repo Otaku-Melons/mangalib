@@ -1,14 +1,14 @@
 {
-    "domain": "hentailib",
+    "domain": "mangalib",
     "directory" : "",
     "scan-target" : "",
     "disable-age-limit-warning": true,
-    "sign-in": true,
-    "email": "nafomin14@gmail.com",
-    "password": "magicka343",
+    "sign-in": false,
+    "email": "",
+    "password": "",
     "delay": 5,
     "getting-slide-sizes": false,
     "old-slide-receiving-mode": false,
-    "server": "compress",
+    "server": "fourth",
     "logs-cleanup": true
 }
