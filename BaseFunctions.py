@@ -632,8 +632,12 @@ def GetMangaData(Browser, MangaName, Settings):
 		IsVertical = True
 
 	IsYaoi = False
-	if "яой" in GenresArray:
-		IsYaoi = True
+	for InObj in GenresArray:
+		IsYaoiTemplate = {}
+		IsYaoiTemplate['id'] = 0
+		IsYaoiTemplate['name'] = "яой"
+		if IsYaoiTemplate in GenresArray:
+			IsYaoi = True
 	
 	JSON = { 
 		"id" : int(SiteWindowData["manga"]["id"]), 
