@@ -17,6 +17,47 @@ import re
 import os
 
 #==========================================================================================#
+# >>>>> КЛАССЫ <<<<< #
+#==========================================================================================#
+
+# Вывод в консоль цветного текста.
+class ColoredPrinter(object):
+	
+	# Конструктор.
+	def __init__(self):
+		# Базовые цвета.
+		self.BLACK = "0"
+		self.RED = "1"
+		self.GREEN = "2"
+		self.YELLOW = "3"
+		self.BLUE = "4"
+		self.PURPLE = "5"
+		self.CYAN = "6"
+		self.WHITE = "7"
+		# Переключатель: возвращать ли стандартные настройки после каждого вывода.
+		self.ResetStylesAfterPrint = True
+		# Переключатель: переход на новую строку после вывода.
+		self.NewLineAfterPrint = False
+
+	# Вывод в консоль.
+	def Print(self, Text: str(), TextColor: str(), BackgroundColor: str() = ""):
+		# Если передан цвет для фота, то создать соответствующий модификатор.
+		if BackgroundColor != "":
+			BackgroundColor = "\033[4" + BackgroundColor + "m"
+		# Генерация модификатора цвета текста.
+		TextColor = "\033[3" + TextColor + "m"
+		# Создание результирующей строки со стилями: цветового модификатора, модификатора фона, текста.
+		StyledText = TextColor + BackgroundColor + Text
+		# Если указано, добавить модификатор сброса стилей после вывода.
+		if self.ResetStylesAfterPrint == True:
+			StyledText = StyledText + "\033[0m"
+		# Вывод в консоль и установка параметра перехода на норвую строку.
+		if self.NewLineAfterPrint == True:
+			print(StyledText, end = "")
+		else:
+			print(StyledText)
+
+#==========================================================================================#
 # >>>>> БАЗОВЫЕ ФУНКЦИИ <<<<< #
 #==========================================================================================#
 
@@ -38,31 +79,31 @@ def RemoveHTML(TextHTML):
 
 # Удаляет из строки символы: новой строки, табуляции, пробелы из начала и конца.
 def RemoveSpaceSymbols(Text):
-    Text = Text.replace('\n', '')
-    Text = Text.replace('\t', '')
-    Text = ' '.join(Text.split())
+	Text = Text.replace('\n', '')
+	Text = Text.replace('\t', '')
+	Text = ' '.join(Text.split())
 
-    return Text.strip()
+	return Text.strip()
 
 # Заменяет символ новой строки на запятую с пробелом.
 def ReplaceEndlToComma(Text):
-    Text = Text.strip()
-    Text = Text.replace('\n', ', ')
+	Text = Text.strip()
+	Text = Text.replace('\n', ', ')
 
-    return Text
+	return Text
 
 # Преобразует литеральное число в int.
 # Примечание: используется только для вычисления количества оценок.
 def LiteralToInt(String):
-    if String.isdigit():
-        return int(String)
-    else:
-        Number = float(String[:-1]) * 1000
-    return int(Number)
+	if String.isdigit():
+		return int(String)
+	else:
+		Number = float(String[:-1]) * 1000
+	return int(Number)
 
 # Очищает консоль.
 def Cls():
-    os.system('cls' if os.name == 'nt' else 'clear')
+	os.system('cls' if os.name == 'nt' else 'clear')
 
 # Выводит прогресс процесса.
 def PrintProgress(String, Current, Total):
@@ -75,7 +116,7 @@ def RemoveArgumentsFromURL(URL):
 
 # Усекает число до определённого количества знаков после запятой.
 def ToFixedFloat(FloatNumber, Digits = 0):
-    return float(f"{FloatNumber:.{Digits}f}")
+	return float(f"{FloatNumber:.{Digits}f}")
 
 # Проевращает число секунд в строку-дескриптор времени по формату [<x> hours <y> minuts <z> seconds].
 def SecondsToTimeString(Seconds):
@@ -107,6 +148,25 @@ def GetRandomUserAgent():
 	UserAgentRotator = UserAgent(software_names = SoftwareNames, operating_systems = OperatingSystems, limit = 100)
 
 	return str(UserAgentRotator.get_random_user_agent()).strip('"')
+
+# Удаляет повторы значений из словаря.
+def RemoveDuplicatesFromDict(Dictionary: dict()):
+	return {v:k for k,v in {Dictionary[k]:k for k in reversed(list(Dictionary))}.items()}
+
+# Инвертирует порядок элементов словаря.
+def ReverseDict(Dictionary: dict()):
+	# Список ключей.
+	Keys = list(Dictionary.keys())
+	# Инвертирование списка ключей.
+	Keys.reverse()
+	# Инвертированный словарь.
+	ReversedDict = dict()
+
+	# Запись значений в обратном порядке.
+	for InObj in Keys:
+		ReversedDict[InObj] = Dictionary[InObj]
+
+	return ReversedDict
 
 #==========================================================================================#
 # >>>>> ПАРСИНГ ТАЙТЛА <<<<< #
@@ -189,34 +249,44 @@ def GetSynt_BranchID(MangaName, True_BranchID):
 	
 	return str(MangaIntName) + True_BranchID
 
-#Вход на сайт.
+# Вход на сайт.
 def LogIn(Browser, Settings):
-	Browser.get("https://lib.social/login?from=https%3A%2F%2F" + Settings["domain"].replace("https://", "").replace(".me/", "") + ".me")
+	# Переход на главную страницу.
+	Browser.get(Settings["domain"][:-1])
+	# Ожидание появления кнопки входа.
+	WebDriverWait(Browser, 60).until(EC.visibility_of_element_located((By.CLASS_NAME, "header__sign-in")))
+	# Клик по кнопке входа.
+	Browser.find_element(By.CLASS_NAME, "header__sign-in").click()
 
+	# Поиск поля ввода логина.
 	EmailInput = Browser.find_element(By.CSS_SELECTOR , "input[name=\"email\"]")
+	# Ввод логина.
 	PasswordInput = Browser.find_element(By.CSS_SELECTOR , "input[name=\"password\"]")
 
+	# Поиск поля ввода пароля.
 	EmailInput.send_keys(Settings["email"])
+	# Ввод пароля.
 	PasswordInput.send_keys(Settings["password"])
 
+	# Клик по кнопке входа.
 	Browser.find_element(By.CLASS_NAME, "button_primary").click()
 
 #Возвращает контейнер с данными о переводчике для записи в JSON.
 def GetPublisherData(Div, Domain):
-    Soup = BeautifulSoup(str(Div), "lxml")
-    Bufer = {}
-    Bufer['id'] = 0
-    Bufer['name'] = RemoveSpaceSymbols(RemoveHTML(Soup.find('div', {'class': 'team-list-item__name'})))
-    Bufer['img'] = str(Soup.find('div', {'class': 'team-list-item__cover'}))
-    Bufer['img'] = Bufer['img'].split('(')[-1].split(')')[0].replace('?', '').replace('"', '')
-    if Bufer['img'] != "/uploads/no-image.png":
-        Bufer['dir'] = Bufer['img'].split('/')[5]
-    else:
-        Bufer['dir'] = Soup.find('a')['href'].split('/')[-1]
-        Bufer['img'] = Domain[:-1] + Bufer['img']
-    Bufer['tagline'] = ''
-    Bufer['type'] = 'Переводчик'
-    return Bufer
+	Soup = BeautifulSoup(str(Div), "lxml")
+	Bufer = {}
+	Bufer['id'] = 0
+	Bufer['name'] = RemoveSpaceSymbols(RemoveHTML(Soup.find('div', {'class': 'team-list-item__name'})))
+	Bufer['img'] = str(Soup.find('div', {'class': 'team-list-item__cover'}))
+	Bufer['img'] = Bufer['img'].split('(')[-1].split(')')[0].replace('?', '').replace('"', '')
+	if Bufer['img'] != "/uploads/no-image.png":
+		Bufer['dir'] = Bufer['img'].split('/')[5]
+	else:
+		Bufer['dir'] = Soup.find('a')['href'].split('/')[-1]
+		Bufer['img'] = Domain[:-1] + Bufer['img']
+	Bufer['tagline'] = ''
+	Bufer['type'] = 'Переводчик'
+	return Bufer
 
 # Отключает уведомление о возрастном ограничении.
 def DisableAgeLimitWarning(Browser, Settings):
@@ -957,8 +1027,10 @@ def GetContentServersList(Browser, Settings):
 	Browser.find_elements(By.CLASS_NAME, "updates__chapter")[0].click()
 	# Получение JS инофрмации о странице.
 	SiteWindowInfo = Browser.execute_script("return window.__info;")
+	# Список словарей.
+	ServersList = RemoveDuplicatesFromDict(ReverseDict(SiteWindowInfo["servers"]))
 
-	return SiteWindowInfo["servers"]
+	return ServersList
 
 # Строит алиас главы из описания.
 # Примечание: передать структуру главы из описания в JSON тайтла.
@@ -986,6 +1058,8 @@ def AmendChapterSlides(Browser, Settings, Servers, TitleJSON, Chapter):
 		print("\nTrying to amend \"" + ChapterLink +  "\" with server: " + ServersNames[i])
 		# Запись нового сервера в имитацию настроек.
 		FakeSettings["server"] = ServersNames[i]
+		# Запись переключателя, включающего получение слайдов манги.
+		FakeSettings["getting-slide-sizes"] = True
 		# Запись в лог сообщения о нахождении неполного описания главы.
 		logging.info("Amending: \"" + ChapterLink + "\". Not all slides have sizes in chapter: \"" + ChapterLink + "\". Sizing...")
 		# Получение информации о слайдах главы с заданного сервера.

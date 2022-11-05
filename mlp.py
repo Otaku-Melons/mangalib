@@ -22,6 +22,7 @@ from BaseFunctions import Shutdown
 from BaseFunctions import Cls
 
 from Components import GetChapterSlidesInJSON
+from Components import ChromeHeadlessTest
 from Components import UpdateTitle
 from Components import ParceTitle
 from Components import ScanTitles
@@ -71,6 +72,8 @@ Browser.set_window_size(1920, 1080)
 logging.info("====== Prepare to starting ======")
 # Запись времени начала работы скрипта.
 logging.info("Script started at " + str(CurrentDate)[:-7] + ".")
+# Запись команды, использовавшейся для запуска скрипта.
+logging.info("Launch command: \"" + " ".join(sys.argv[1:len(sys.argv)]) + "\".")
 # Инициализация хранилища настроек со стадартными значениями.
 Settings = {
 	"domain": "mangalib",
@@ -136,6 +139,10 @@ InFuncMessage_Shutdown = ""
 IsForceModeActivated = False
 # Сообщение для внутренних функций: режим перезаписи.
 InFuncMessage_ForceMode = ""
+# Запустить ли функцию amend по завершению работы.
+AmendAfterWork = False
+# Сообщение для внутренних функций: будет запущена команда amend после обработки.
+InFuncMessage_AmendAfterWork = ""
 
 # Обработка флага: режим перезаписи.
 if "-f" in sys.argv:
@@ -159,6 +166,23 @@ if "-s" in sys.argv:
 	logging.info("Computer will be turned off after the parser is finished!")
 	# Установка сообщения для внутренних функций.
 	InFuncMessage_Shutdown = "Computer will be turned off after the parser is finished!\n"
+
+# Обработка флага: запустить ли функцию amend по завершению работы.
+if "-am" in sys.argv:
+	# Проверка наличия нужных команд.
+	if "parce" in sys.argv or "update" in sys.argv:
+		# Включение автоматического исправления.
+		AmendAfterWork = True
+		# Запись в лог сообщения о том, что по завершению работы будет запущена функция amend.
+		logging.info("Amendid will be started after finishing.")
+		# Установка сообщения для внутренних функций.
+		InFuncMessage_AmendAfterWork = "Amendid will be started after finishing current task.\n"
+		# Список файлов для обработки.
+		global AmendAfterWork_TitleList
+		AmendAfterWork_TitleList = list()
+	else:
+		# Запись в лог сообщения об ошибке: неверная команда для использования флага.
+		logging.error("Flag \"-am\" is not applicable to this method.")
 
 #==========================================================================================#
 # >>>>> ОБРАБОТКА ОСНОВНЫХ КОММАНД <<<<< #
@@ -188,6 +212,9 @@ if len(sys.argv) >= 3:
 						# Запись в лог сообщения о количестве тайтлов в манифесте.
 						logging.info("Manifest successfully was loaded. Titles: " + str(len(TitlesList)) + ".")
 
+						# Если будет запускаться amend, то сохранить список тайтлов.
+						AmendAfterWork_TitleList = TitlesList
+
 						# Парсить каждый тайтл.
 						for i in range(0, len(TitlesList)):
 							# Алиас манги.
@@ -197,7 +224,7 @@ if len(sys.argv) >= 3:
 							# Сообщение для внутренних функций: прогресс выполнения.
 							InFuncMessage_Progress = ""
 							# Генерация сообщения для внутренних функций о прогрессе выполнения.
-							InFuncMessage_Progress += InFuncMessage_Shutdown + InFuncMessage_ForceMode + "Parcing titles from manifest: " + str(i + 1) + " / " + str(len(TitlesList)) + "\n"
+							InFuncMessage_Progress += InFuncMessage_AmendAfterWork + InFuncMessage_Shutdown + InFuncMessage_ForceMode + "Parcing titles from manifest: " + str(i + 1) + " / " + str(len(TitlesList)) + "\n"
 							# Парсинг тайтла.
 							ParceTitle(Browser, MangaName, Settings, ShowProgress = InFuncMessage_Progress, ForceMode = IsForceModeActivated)
 
@@ -211,34 +238,37 @@ if len(sys.argv) >= 3:
 			# Запись в лог сообщения о начале парсинга конкретной манги.
 			logging.info("Parcing: \"" + MangaName + "\". Starting...")
 			# Парсинг тайтла.
-			ParceTitle(Browser, MangaName, Settings, ShowProgress = InFuncMessage_Shutdown + InFuncMessage_ForceMode, ForceMode = IsForceModeActivated)
+			ParceTitle(Browser, MangaName, Settings, ShowProgress = InFuncMessage_AmendAfterWork + InFuncMessage_Shutdown + InFuncMessage_ForceMode, ForceMode = IsForceModeActivated)
 
 	# Обновление JSON тайтлов.
-	elif sys.argv[1] == "update":
+	if sys.argv[1] == "update":
 		# Вывод в лог заголовка: обновление.
 		logging.info("====== Updating ======")
 
 		# Если вместо алиаса установлен флаг -all, начать обновление всех тайтлов из директории обработки, иначе провести обновление по переданному алиасу.
 		if sys.argv[2] == "-all":
 			# Получение списка файлов в директории.
-			FilesList = os.listdir(Settings["directory"])
+			TitlesList = os.listdir(Settings["directory"])
 			# Фильтрация только файлов формата JSON.
-			FilesList = list(filter(lambda x: x.endswith(".json"), FilesList))
+			TitlesList = list(filter(lambda x: x.endswith(".json"), TitlesList))
 			# Уадление манифеста.
-			if "#Manifest.json" in FilesList:
-				FilesList.remove("#Manifest.json")
+			if "#Manifest.json" in TitlesList:
+				TitlesList.remove("#Manifest.json")
 			# Удаление файла с определениями слайдов.
-			if "#Slides.json" in FilesList:
-				FilesList.remove("#Slides.json")
+			if "#Slides.json" in TitlesList:
+				TitlesList.remove("#Slides.json")
+
+			# Если будет запускаться amend, то сохранить список тайтлов.
+			AmendAfterWork_TitleList = TitlesList
 
 			# Обновлять каждый тайтл.
-			for i in range(0, len(FilesList)):
+			for i in range(0, len(TitlesList)):
 				# Алиас манги.
-				MangaName = FilesList[i].replace(".json", "")
+				MangaName = TitlesList[i].replace(".json", "")
 				# Сообщение для внутренних функций: прогресс выполнения.
 				InFuncMessage_Progress = ""
 				# Генерация сообщения для внутренних функций о прогрессе выполнения.
-				InFuncMessage_Progress += InFuncMessage_Shutdown + "Updating titles: " + str(i + 1) + " / " + str(len(FilesList))
+				InFuncMessage_Progress += InFuncMessage_AmendAfterWork + InFuncMessage_Shutdown + "Updating titles: " + str(i + 1) + " / " + str(len(TitlesList))
 				# Парсинг тайтла.
 				UpdateTitle(Browser, Settings, MangaName, InFuncMessage_Progress)
 				# Выдерживание интервала перехода между тайтлами.
@@ -248,12 +278,12 @@ if len(sys.argv) >= 3:
 			# Установка алиаса тайтла из аргументов команды.
 			MangaName = sys.argv[2]
 			# Генерация сообщения для внутренних функций о прогрессе выполнения.
-			InFuncMessage_Progress = InFuncMessage_Shutdown + "Updating title \"" + MangaName + "\"...\n"
+			InFuncMessage_Progress = InFuncMessage_AmendAfterWork + InFuncMessage_Shutdown + "Updating title \"" + MangaName + "\"...\n"
 			# Обновление тайтла.
 			UpdateTitle(Browser, Settings, MangaName, "")
 
 	# Попытка получить размер слайдов для описанных в JSON глав.
-	elif sys.argv[1] == "amend":
+	if sys.argv[1] == "amend" or AmendAfterWork == True:
 		# Вывод в лог заголовка: другие методы.
 		logging.info("====== Amending ======")
 		# Список серверов с контентом.
@@ -271,6 +301,9 @@ if len(sys.argv) >= 3:
 			# Удаление файла с определениями слайдов.
 			if "#Slides.json" in FilesList:
 				FilesList.remove("#Slides.json")
+
+			# Если запускается после парсинга или обновления, то получить список тайтлов.
+			FilesList = AmendAfterWork_TitleList
 
 			# Дополнять каждый тайтл.
 			for i in range(0, len(FilesList)):
@@ -294,7 +327,7 @@ if len(sys.argv) >= 3:
 			Amend(Browser, Settings, Servers, MangaName, InFuncMessage_Progress)
 
 	# Генерация синтетического BranchID алиаса.
-	elif sys.argv[1] == "ubid":
+	if sys.argv[1] == "ubid":
 		# Вывод в лог заголовка: другие методы.
 		logging.info("====== Other ======")
 		# Запись в лог сообщения о преобразовании алиаса в синтетический BranchID.
@@ -303,14 +336,14 @@ if len(sys.argv) >= 3:
 		print("Alias \"" + sys.argv[2] + "\" Synthetic branch ID is: " + GetSynt_BranchID(sys.argv[2], "") + "\nIf title has translation branches, add the \"bid\" from the browser address bar to get the desired value.")
 
 	# Получение данных о слайдах конкретной главы.
-	elif sys.argv[1] == "getsl":
+	if sys.argv[1] == "getsl":
 		# Вывод в лог заголовка: другие методы.
 		logging.info("====== Other ======")
 		# Сохранение информации о слайдах конкретной главы в Slides.json.
 		GetChapterSlidesInJSON(Browser, sys.argv[2], Settings)
 
 	# Запись всех алиасов на странице каталога сайта (поддерживает фильтры).
-	elif sys.argv[1] == "scan":
+	if sys.argv[1] == "scan":
 		# Вывод в лог заголовка: другие методы.
 		logging.info("====== Other ======")
 		# Запись в лог сообщения о начале сканирования страницы каталога.
@@ -322,6 +355,16 @@ if len(sys.argv) >= 3:
 		else:
 			ScanTitles(Browser, Settings, sys.argv[2])
 
+# Однокомпонентные команды: chtest.
+if len(sys.argv) >= 2:
+
+	# Тестирование парсера на скрытность.
+	if sys.argv[1] == "chtest":
+		# Вывод в лог заголовка: другие методы.
+		logging.info("====== Other ======")
+		# Запуск теста Chrome Headless Detection.
+		ChromeHeadlessTest(Browser)
+
 # Обработка исключения: недостаточно аргументов.
 elif len(sys.argv) == 1:
 	logging.error("Not enough arguments.")
@@ -330,8 +373,12 @@ elif len(sys.argv) == 1:
 # >>>>> ЗАВЕРШЕНИЕ РАБОТЫ СКРИПТА <<<<< #
 #==========================================================================================#
 
-# Закрытие браузера.
-Browser.close()
+# Закрытие браузера, если уже не закрыт.
+try:
+	Browser.close()
+except Exception:
+	pass
+
 # Очистка консоли.
 Cls()
 

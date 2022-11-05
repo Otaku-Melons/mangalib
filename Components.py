@@ -4,8 +4,12 @@ import logging
 import json
 import os
 
+# >>>>> КЛАССЫ <<<<< #
+from BaseFunctions import ColoredPrinter
+
 # >>>>> БАЗОВЫЕ ФУНКЦИИ <<<<< #
 from BaseFunctions import RemoveArgumentsFromURL
+from BaseFunctions import RemoveHTML
 from BaseFunctions import Cls
 
 # >>>>> ПАРСИНГ ТАЙТЛА <<<<< #
@@ -456,6 +460,49 @@ def Amend(Browser, Settings, Servers, MangaName, InFuncMessage_Progress):
 	else:
 		# Запись в лог сообщения об ошибке доступа к файлу.
 		logging.error("Failed to find \"" + Settings["directory"] + "\\" + MangaName + ".json" + "\".")
+
+# Запуск теста Chrome Headless Detection.
+def ChromeHeadlessTest(Browser):
+	# Переход на стрицу теста.
+	Browser.get("https://intoli.com/blog/not-possible-to-block-chrome-headless/chrome-headless-test.html")
+	# Цветной вывод.
+	ColoredPrinterObj = ColoredPrinter()
+	# HTML-код страницы после полной загрузки.
+	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
+	# Парсинг HTML-кода страницы.
+	Soup = BeautifulSoup(BodyHTML, "lxml")
+	# Получение значения WebDriver.
+	UserAgent = RemoveHTML(Soup.find("td", {"id": "user-agent-result"}))
+	# Получение значения WebDriver.
+	WebDriver = RemoveHTML(Soup.find("td", {"id": "webdriver-result"}))
+	# Получение значения Chrome.
+	Chrome = RemoveHTML(Soup.find("td", {"id": "chrome-result"}))
+	# Получение значения Chrome.
+	Permissions = RemoveHTML(Soup.find("td", {"id": "permissions-result"}))
+	# Получение значения Chrome.
+	PluginsLength = RemoveHTML(Soup.find("td", {"id": "plugins-length-result"}))
+	# Получение значения Chrome.
+	Languages = RemoveHTML(Soup.find("td", {"id": "languages-result"}))
+
+	# Очистка консоли.
+	Cls()
+	# Вывод результатов теста.
+	print(f"UserAgent: {UserAgent}")
+	print("WebDriver: ", end = "")
+	if WebDriver == "missing (passed)":
+		ColoredPrinterObj.Print(f"{WebDriver}", ColoredPrinterObj.GREEN)
+	else:
+		ColoredPrinterObj.Print(f"{WebDriver}", ColoredPrinterObj.RED)
+	print(f"Chrome: {Chrome}")
+	print(f"Permissions: {Permissions}")
+	print(f"PluginsLength: {PluginsLength}")
+	print(f"Languages: {Languages}\n")
+	# Закрытие браузера.
+	Browser.close()
+
+	# Пауза.
+	input("Press ENTER to exit...")
+
 
 
 
