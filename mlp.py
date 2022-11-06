@@ -303,7 +303,8 @@ if len(sys.argv) >= 3:
 				FilesList.remove("#Slides.json")
 
 			# Если запускается после парсинга или обновления, то получить список тайтлов.
-			FilesList = AmendAfterWork_TitleList
+			if AmendAfterWork == True:
+				FilesList = AmendAfterWork_TitleList
 
 			# Дополнять каждый тайтл.
 			for i in range(0, len(FilesList)):
