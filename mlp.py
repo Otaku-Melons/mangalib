@@ -40,7 +40,7 @@ StartTime = time.time()
 LogFilename = "Logs\\" + str(CurrentDate)[:-7] + ".log"
 LogFilename = LogFilename.replace(':', '-')
 # Установка конфигнурации.
-logging.basicConfig(filename = LogFilename, encoding="utf-8", level = logging.INFO)
+logging.basicConfig(filename = LogFilename, encoding = "utf-8", level = logging.INFO)
 
 #==========================================================================================#
 # >>>>> ОТКРЫТИЕ БРАУЗЕРА <<<<< #
@@ -373,6 +373,9 @@ elif len(sys.argv) == 1:
 #==========================================================================================#
 # >>>>> ЗАВЕРШЕНИЕ РАБОТЫ СКРИПТА <<<<< #
 #==========================================================================================#
+
+# Вывод в лог заголовка: завершение работы.
+logging.info("====== Exiting ======")
 
 # Закрытие браузера, если уже не закрыт.
 try:

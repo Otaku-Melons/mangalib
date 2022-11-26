@@ -392,7 +392,7 @@ def GetChaptersLinks(Browser):
 	return ChaptersLinks
 
 # Получает список слайдов главы из JS-данных страницы и определяет их размеры в пикселях.
-def GetMangaSlidesUrlList(Browser, ChapterLink, Settings):
+def GetMangaSlidesUrlList(Browser, Settings, ChapterLink, Logging = True):
 	# Переход на страницу главы.
 	Browser.get(Settings["domain"][:-1] + ChapterLink)
 	# Ожидание загрузки JS данных о главе.
@@ -449,11 +449,13 @@ def GetMangaSlidesUrlList(Browser, ChapterLink, Settings):
 
 				except PIL.UnidentifiedImageError:
 					# Запись в лог ошибки распознания слайда.
-					logging.warning("Chapter: \"" + ChapterLink + "\" parcing. Unable to recognize image \"" + SlidesLinks[i] + "\".")
+					if Logging == True:
+						logging.warning("Chapter: \"" + ChapterLink + "\" parcing. Unable to recognize image \"" + SlidesLinks[i] + "\".")
 
 				except OSError:
 					# Запись в лог ошибки: усечённый файл.
-					logging.warning("Chapter: \"" + ChapterLink + "\" parcing. Truncated image \"" + SlidesLinks[i] + "\".")
+					if Logging == True:
+						logging.warning("Chapter: \"" + ChapterLink + "\" parcing. Truncated image \"" + SlidesLinks[i] + "\".")
 
 			else:
 				# Инкремент количества неполученных слайдов.
@@ -489,9 +491,9 @@ def GetMangaSlidesUrlList(Browser, ChapterLink, Settings):
 		ChapterData.append(FrameData)
 
 	# Запись в лог результата выполнения и обработка неполного получения данных о слайдах.
-	if SlidesErrors == 0:
+	if SlidesErrors == 0 and Logging == True:
 		logging.info("Chapter: \"" + ChapterLink + "\" parced. Slides count: " + str(len(ChapterData)) + ".")
-	else:
+	elif Logging == True:
 		logging.warning("Chapter: \"" + ChapterLink + "\" parced with errors. Not all slides were received correctly : " + str(len(ChapterData) - SlidesErrors) + " / " + str(len(ChapterData)) + ".")
 
 	return ChapterData
@@ -804,7 +806,7 @@ def MakeContentData(Browser, Settings, ShowProgress, ChaptersNames, ChaptersLink
 		PrintProgress(ShowProgress + "Branch ID: " + True_BranchID + ". Parcing chapters: ", str(i + 1), str(len(ChaptersLinks)))
 
 		# Получение информации о слайдах.
-		ChapterDataBufer["slides"] = GetMangaSlidesUrlList(Browser, ChaptersLinks[i] + QueryBranch, Settings)
+		ChapterDataBufer["slides"] = GetMangaSlidesUrlList(Browser, Settings, ChaptersLinks[i] + QueryBranch)
 		
 		# Номер тома (целочисленный тип данных).
 		ChapterDataBufer["tome"] = int(ChapterNameData[1])
@@ -812,7 +814,7 @@ def MakeContentData(Browser, Settings, ShowProgress, ChaptersNames, ChaptersLink
 		ChapterDataBufer["chapter"] = ChapterNameData[3]
 		# Название главы: если есть, то записать его, иначе оставить поле пустым.
 		if len(ChapterNameData) > 4:
-			ChapterDataBufer["name"] = RemoveSpaceSymbols(ChaptersNames[i].split('-')[-1])
+			ChapterDataBufer["name"] = RemoveSpaceSymbols(ChaptersNames[i].replace(ChaptersNames[i].split('-')[0], ""))
 		else:
 			ChapterDataBufer["name"] = ""
 		# Индекс главы.
@@ -920,7 +922,7 @@ def ParceChapter(Browser, Settings, ChapterFullLink, True_BranchID):
 	ChapterStruct["name"] = SiteWindowChaptersData[SiteWindowInfo["current"]["index"] - 1]["chapter_name"]
 
 	# Получение информации о слайдах.
-	ChapterStruct["slides"] = GetMangaSlidesUrlList(Browser, ChapterFullLink.replace(Settings["domain"][:-1], "") + True_BranchID, Settings)
+	ChapterStruct["slides"] = GetMangaSlidesUrlList(Browser, Settings, ChapterFullLink.replace(Settings["domain"][:-1], "") + True_BranchID)
 
 	return ChapterStruct
 	
@@ -1005,17 +1007,19 @@ def GetBranchesDescriptionStruct(Browser, Settings, MangaName, True_BranchesID):
 # >>>>> ИСПРАВЛЕНИЕ ТАЙТЛА <<<<< #
 #==========================================================================================#
 
-# Проверяет, содержит ли глава не полностью описанные слайды.
+# Возвращает количество слайдов без определённго разрешения.
 def CheckChapterForNoneSlideSizes(Chapter):
 	# Список слайдов.
 	Slides = Chapter["slides"]
+	# Количество слайдов без размеров.
+	NoneSizesSlidesCount = 0
 
 	# Для каждого слайда проверить наличие размеров.
 	for i in range(0, len(Slides)):
 		if Slides[i]["width"] == None or Slides[i]["height"] == None:
-			return True
+			NoneSizesSlidesCount += 1
 
-	return False
+	return NoneSizesSlidesCount
 
 # Получение списка серверов с контентом.
 def GetContentServersList(Browser, Settings):
@@ -1051,31 +1055,42 @@ def AmendChapterSlides(Browser, Settings, Servers, TitleJSON, Chapter):
 	ChapterBufer = Chapter
 	# Копирование структуры настроек.
 	FakeSettings = Settings
+	# Количество слайдов без определённого разрешения в главе.
+	NoneSizesSlidesCount = CheckChapterForNoneSlideSizes(Chapter)
+	# Переход на новую строку.
+	print("\n")
 
 	# Получать слайды с сервера, пока не исчезнет ошибка.
 	for i in range(0, len(ServersNames)):
 		# Вывод сообщения в консоль о дополнении конкретного тайтла.
-		print("\nTrying to amend \"" + ChapterLink +  "\" with server: " + ServersNames[i])
+		print("Trying to amend \"" + ChapterLink +  "\" with server: " + ServersNames[i])
 		# Запись нового сервера в имитацию настроек.
 		FakeSettings["server"] = ServersNames[i]
 		# Запись переключателя, включающего получение слайдов манги.
 		FakeSettings["getting-slide-sizes"] = True
 		# Запись в лог сообщения о нахождении неполного описания главы.
-		logging.info("Amending: \"" + ChapterLink + "\". Not all slides have sizes in chapter: \"" + ChapterLink + "\". Sizing...")
+		logging.info("Amending: \"" + ChapterLink + "\" with server \"" + ServersNames[i] + "\". Trying...")
 		# Получение информации о слайдах главы с заданного сервера.
-		ChapterBufer["slides"] = GetMangaSlidesUrlList(Browser, ChapterLink, FakeSettings)
+		ChapterBufer["slides"] = GetMangaSlidesUrlList(Browser, FakeSettings, ChapterLink, Logging = False)
+		# Количество слайдов без определённого разрешения в главе, полученной с сервера исправления.
+		AmendedNoneSizesSlidesCount = CheckChapterForNoneSlideSizes(ChapterBufer)
 		# Если описание слайдов в порядке, то сохранить и вернуть его.
-		if CheckChapterForNoneSlideSizes(ChapterBufer) == False:
+		if AmendedNoneSizesSlidesCount == 0:
 			# Запись в лог сообщения о дополнении главы размерами слайдов.
-			logging.info("Amending: \"" + ChapterLink + "\". Chapter amended with server \"" + ServersNames[i] + "\".")
+			logging.info("Amending: \"" + ChapterLink + "\" successfully amended with server \"" + ServersNames[i] + "\".")
 			# Вывод сообщения в консоль о дополнении конкретного тайтла.
 			print("Chapter \"" + ChapterLink +  "\" amended successfully!")
 
 			return ChapterBufer
 
+		# Иначе сохранить вариант с меньшим количеством ошибок.
+		elif AmendedNoneSizesSlidesCount < NoneSizesSlidesCount:
+			Chapter = ChapterBufer
+
+
 	# Запись в лог сообщения о невозможности дополнить главу размерами слайдов.
 	logging.warning("Amending: \"" + ChapterLink + "\". Failed to amend chapter.")
-	# Вывод сообщения в консоль о дополнении конкретного тайтла.
+	# Вывод сообщения в консоль о неудачном дополнении конкретного тайтла.
 	print("Chapter \"" + ChapterLink +  "\" couldn't amended.")
 
 	return Chapter

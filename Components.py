@@ -405,7 +405,7 @@ def GetChapterSlidesInJSON(Browser, ChapterURL, Settings):
 	ChapterURL = RemoveArgumentsFromURL(ChapterURL)
 
 	# Получение информации о слайдах.
-	SlidesInfo = GetMangaSlidesUrlList(Browser, ChapterURL, Settings)
+	SlidesInfo = GetMangaSlidesUrlList(Browser, Settings, ChapterURL)
 
 	# Сохранение информации о слайдах.
 	with open(Settings["directory"] + "\\#Slides.json", "w", encoding = "utf-8") as FileWrite:
@@ -433,30 +433,40 @@ def Amend(Browser, Settings, Servers, MangaName, InFuncMessage_Progress):
 				# Получение списка синтетических ID ветвей из JSON.
 				Synt_BranchesID = GetBranchesIdFromJSON(TitleJSON)
 				# Количество неполных описаний слайдов.
-				SlidesBadDescriptionsCount = 0
+				ChaptersBadDescriptionsCount = 0
+				# Статус: запускалось ли исправление.
+				AmendingWasStarted = False
+				# Запись в лог сообщения о начале исправления.
+				logging.info("Amending: \"" + MangaName + "\". Starting...")
 
-				# В каждой ветви искать слайд с неполным описанием.
+				# В каждой ветви искать главу с неполным описанием.
 				for BranchIndex in range(0, len(Synt_BranchesID)):
 					# Проверить каждую главу.
 					for ChapterIndex in range(0, len(TitleJSON["content"][Synt_BranchesID[BranchIndex]])):
-						# Если глава не полностью описана, добавить её в список.
-						if CheckChapterForNoneSlideSizes(TitleJSON["content"][Synt_BranchesID[BranchIndex]][ChapterIndex]) == True:
-							# Сохранение исправленного описания главы.
+						# Если глава не полностью описана, попытаться исправить её.
+						if CheckChapterForNoneSlideSizes(TitleJSON["content"][Synt_BranchesID[BranchIndex]][ChapterIndex]) > 0:
+							# Переключение статуса исправления.
+							AmendingWasStarted = True
+							# Сохранение структуры главы после попытки исправления.
 							TitleJSON["content"][Synt_BranchesID[BranchIndex]][ChapterIndex] = AmendChapterSlides(Browser, Settings, Servers, TitleJSON, TitleJSON["content"][Synt_BranchesID[BranchIndex]][ChapterIndex])
-							# Инкремент количества плохих описаний слайдов.
-							SlidesBadDescriptionsCount += 1
+							# Инкремент количества плохих описаний глав, если не исправлено.
+							if CheckChapterForNoneSlideSizes(TitleJSON["content"][Synt_BranchesID[BranchIndex]][ChapterIndex]) > 0:
+								ChaptersBadDescriptionsCount += 1
 
-				if SlidesBadDescriptionsCount > 0:
+				# Если исправление запускалось.
+				if AmendingWasStarted == True:
 					# Сохранение файла JSON.
 					with open(Settings["directory"] + "\\" + MangaName + ".json", "w", encoding = "utf-8") as FileWrite:
 						json.dump(TitleJSON, FileWrite, ensure_ascii = False, indent = 2, separators = (',', ': '))
 
-					# Запись в лог сообщения об успешном исправлении файла JSON.
-					logging.info("Amending: \"" + MangaName + "\". Completed. Chapters without slides sizes count: " + str(SlidesBadDescriptionsCount) + ".")
+					# Запись в лог сообщения о завершении исправлении файла JSON.
+					logging.info("Amending: \"" + MangaName + "\". Completed. Bad chapters: " + str(ChaptersBadDescriptionsCount) + ".")
 
-				else:
-					# Запись в лог сообщения об успешном исправлении файла JSON.
-					logging.info("Amending: \"" + MangaName + "\". Completed. No partial chapters descriptions.")
+				# Если исправление не запускалось.
+				elif AmendingWasStarted == False:
+					# Запись в лог сообщения об отсутствии надобности в исправлении файла JSON.
+					logging.info("Amending: \"" + MangaName + "\". No slides without sizes. Completed.")
+
 	else:
 		# Запись в лог сообщения об ошибке доступа к файлу.
 		logging.error("Failed to find \"" + Settings["directory"] + "\\" + MangaName + ".json" + "\".")
