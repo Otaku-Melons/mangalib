@@ -573,7 +573,7 @@ def GetMangaData(Browser, MangaName, Settings):
 	Browser.get(Settings["domain"] + MangaName + "?section=info")
 	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
 	Soup = BeautifulSoup(BodyHTML, "lxml")
-	SmallSoup = BeautifulSoup(str(Soup.find('div', {'class': 'media-sidebar__cover paper'})), "html.parser")
+	SmallSoup = BeautifulSoup(str(Soup.find('div', {'class': 'media-sidebar__cover paper'})), "lxml")
 	
 	SiteWindowData = Browser.execute_script("return window.__DATA__;")
 
@@ -584,8 +584,14 @@ def GetMangaData(Browser, MangaName, Settings):
 	MangaNameEN = Soup.find('div', {'class': 'media-name__alt'})
 	if MangaNameEN != None:
 		MangaNameEN = MangaNameEN.get_text()
-	
-	AnotherName = ReplaceEndlToComma(Soup.find_all('div', {'class': 'media-info-list__value'})[-1].get_text())
+
+	PreAnotherName = Soup.find_all('div', {'class': 'media-info-list__item'})
+	AnotherName = ""
+
+	for InObj in PreAnotherName:
+		if "Альтернативные названия" in str(InObj):
+			AnotherName = RemoveHTML(str(InObj).replace("Альтернативные названия", "").replace("показать все", ""))
+			AnotherName = AnotherName.replace("\n\n\n", "").replace("\n", ", ")
 	
 	PreDescription = Soup.find('div', {'class': 'media-description__text'})
 	Description = ""
@@ -1052,13 +1058,11 @@ def AmendChapterSlides(Browser, Settings, Servers, TitleJSON, Chapter):
 	# Ссылка на главу.
 	ChapterLink = BuildChapterSlug(TitleJSON["dir"], Chapter)
 	# Временное хранилище главы.
-	ChapterBufer = Chapter
+	ChapterBufer = dict(Chapter)
 	# Копирование структуры настроек.
 	FakeSettings = Settings
 	# Количество слайдов без определённого разрешения в главе.
 	NoneSizesSlidesCount = CheckChapterForNoneSlideSizes(Chapter)
-	# Переход на новую строку.
-	print("\n")
 
 	# Получать слайды с сервера, пока не исчезнет ошибка.
 	for i in range(0, len(ServersNames)):
@@ -1074,6 +1078,7 @@ def AmendChapterSlides(Browser, Settings, Servers, TitleJSON, Chapter):
 		ChapterBufer["slides"] = GetMangaSlidesUrlList(Browser, FakeSettings, ChapterLink, Logging = False)
 		# Количество слайдов без определённого разрешения в главе, полученной с сервера исправления.
 		AmendedNoneSizesSlidesCount = CheckChapterForNoneSlideSizes(ChapterBufer)
+
 		# Если описание слайдов в порядке, то сохранить и вернуть его.
 		if AmendedNoneSizesSlidesCount == 0:
 			# Запись в лог сообщения о дополнении главы размерами слайдов.
