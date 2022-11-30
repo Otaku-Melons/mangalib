@@ -296,7 +296,7 @@ def DisableAgeLimitWarning(Browser, Settings):
 
 	elif Settings["domain"] == "https://hentailib.me/": 
 		# Поиск последней добавленной на сайт главы и переход к ней кликом по ссылке.
-		Browser.find_elements(By.CLASS_NAME, "updates__chapter")[0].click()
+		Browser.find_elements(By.CLASS_NAME, "updates__chapter")[1].click()
 
 	elif Settings["domain"] == "https://yaoilib.me/": 
 		Browser.get("https://yaoilib.me/you-are-here/v1/c151?page=1")
@@ -568,59 +568,107 @@ def GetMangaData_Series(Browser, Settings, MangaName):
 
 	return SeriesContainer
 
-#Получение данных о манге и их сохранение в JSON.
-def GetMangaData(Browser, MangaName, Settings):
+# Получение данных о манге и их сохранение в JSON.
+def GetMangaData(Browser, Settings, MangaName):
+	# Переход на страницу тайтла с информацией.
 	Browser.get(Settings["domain"] + MangaName + "?section=info")
+	# HTML-код страницы после полной загрузки.
 	BodyHTML = Browser.execute_script("return document.body.innerHTML;")
+	# Парсинг HTML-кода страницы.
 	Soup = BeautifulSoup(BodyHTML, "lxml")
-	SmallSoup = BeautifulSoup(str(Soup.find('div', {'class': 'media-sidebar__cover paper'})), "lxml")
-	
+	# Получение JS инофрмации о тайтле.
 	SiteWindowData = Browser.execute_script("return window.__DATA__;")
 
-	CoverURL = SmallSoup.find('img')['src']
-   
-	MangaNameRU = Soup.find('div', {'class': 'media-name__main'}).get_text()
-	
-	MangaNameEN = Soup.find('div', {'class': 'media-name__alt'})
-	if MangaNameEN != None:
-		MangaNameEN = MangaNameEN.get_text()
-
-	PreAnotherName = Soup.find_all('div', {'class': 'media-info-list__item'})
-	AnotherName = ""
-
-	for InObj in PreAnotherName:
-		if "Альтернативные названия" in str(InObj):
-			AnotherName = RemoveHTML(str(InObj).replace("Альтернативные названия", "").replace("показать все", ""))
-			AnotherName = AnotherName.replace("\n\n\n", "").replace("\n", ", ")
-	
-	PreDescription = Soup.find('div', {'class': 'media-description__text'})
+	# ---> Перечень стандартных значений.
+	# ================================================== #
+	# URL обложки.
+	CoverURL = ""
+	# Русское название тайтла.
+	TitleName_RU = ""
+	# Английское название тайтла (ромадзи, транслитерация).
+	TitleName_EN = ""
+	# Альтернативные названия (через ", ").
+	AlternativeNames = ""
+	# Описание тайтла.
 	Description = ""
-	if PreDescription != None:
-		Description = RemoveHTML(PreDescription.get_text()).strip()
-	
-	PrePublicationYear = Soup.find_all('a', {'class': 'media-info-list__item'})
-	PublicationYear = 0
-	for InObj in PrePublicationYear:
-		if "Год релиза" in str(InObj):
-			PublicationYear = int(RemoveHTML(InObj).replace('\n', ' ').split()[2])
-	
-	Rating = RemoveSpaceSymbols(Soup.find('div', {'class': 'media-rating__value'}).get_text())
-	
-	Voted = LiteralToInt(RemoveSpaceSymbols(Soup.find('div', {'class': 'media-rating__votes'}).get_text()))
-	
-	AgeLimit = Soup.find('div', {'class': 'media-info-list__value text-danger'})
-	if AgeLimit != None:
-		AgeLimit = int(AgeLimit.get_text()[:-1])
-	else:
-		AgeLimit = 0
-   
-	PreStatus = Soup.find_all('a', {'class': 'media-info-list__item'})
+	# Год релиза тайтла.
+	PublicationYear = None
+	# Рейтинг.
+	Rating = "0"
+	# Количество проголосовавших.
+	VotedCount = 0
+	# Возрастное ограничение.
+	AgeLimit = 0
+	# Статус перевода.
 	Status = "Неизвестен"
-	for InObj in PreStatus:
-		if "Статус перевода" in str(InObj):
-			Status = RemoveHTML(InObj).replace('\n', ' ').split()[2]
+	# Тип тайтла.
+	Type = ""
+	# ================================================== #
 
-	Type = RemoveHTML(Soup.find('div', {'class': 'media-info-list__value'}).get_text())
+	# Поиск блока обложки.
+	CoverBlock = Soup.find("div", {"class": "media-sidebar__cover paper"})
+	# Парсинг блока обложки.
+	SmallSoup = BeautifulSoup(str(CoverBlock), "lxml")
+	# Получение URL обложки.
+	CoverURL = SmallSoup.find("img")["src"]
+   
+	# Получение русского названия тайтла.
+	TitleName_RU = Soup.find("div", {"class": "media-name__main"}).get_text()
+	
+	# Поиск блока английского названия тайтла.
+	TitleNameBlock_EN = Soup.find("div", {"class": "media-name__alt"})
+	# Если такой блок найден, то получить название.
+	if TitleNameBlock_EN != None:
+		TitleName_EN = TitleNameBlock_EN.get_text()
+
+	# ---> Получение данных из медиа-информационных блоков.
+	# ================================================== #
+	# Поиск медиа-информационных блоков.
+	MediaInfoItems = Soup.find_all(["div", "a"], {"class": "media-info-list__item"})
+
+	# Проверка каждого блока.
+	for Item in MediaInfoItems:
+
+		# Обработка: тип тайтла.
+		if "Тип" in str(Item):
+			Type = RemoveHTML(Item).replace("\n", " ").split()[-1]
+
+		# Обработка: год релиза.
+		if "Год релиза" in str(Item):
+			PublicationYear = int(RemoveHTML(Item).replace("\n", " ").split()[-1])
+
+		# Обработка: статус перевода.
+		if "Статус перевода" in str(Item):
+			Status = RemoveHTML(Item).replace("\n", " ").split()[-1]
+
+		# Обработка: возрастное ограничение.
+		if "Возрастной рейтинг" in str(Item):
+			AgeLimit = int(RemoveHTML(Item).replace("\n", " ").split()[-1].replace("+", ""))
+
+		# Обработка: альтернативные названия.
+		if "Альтернативные названия" in str(Item):
+			# Удаление из блока альтернативных названий ненужных строк.
+			AlternativeNames = RemoveHTML(str(Item).replace("Альтернативные названия", "").replace("показать все", ""))
+			# Форматирование альтернативных названий разделителем.
+			AlternativeNames = AlternativeNames.replace("\n\n\n", "").replace("\n", ", ")
+
+	# ================================================== #
+
+	# Поиск блока описания тайтла.
+	TitleDescriptionBlock = Soup.find("div", {"class": "media-description__text"})
+	# Если такой блок найден, то получить описание.
+	if TitleDescriptionBlock != None:
+		Description = RemoveHTML(TitleDescriptionBlock.get_text()).strip("\n \t")
+	
+	# Получение блока рейтинга.
+	RatingBlock = Soup.find("div", {"class": "media-rating__value"})
+	# Получение рейтинга.
+	Rating = RatingBlock.get_text()
+	
+	# Поиск блока количества голосов.
+	VotedBlock = Soup.find("div", {"class": "media-rating__votes"})
+	# Получение приближённого количества голосов.
+	VotedCount = LiteralToInt(VotedBlock.get_text())
 	
 	MediaInfo = Soup.find_all('a', {'class': 'media-tag-item'})
 	Genres = []
@@ -717,6 +765,7 @@ def GetMangaData(Browser, MangaName, Settings):
 		if IsYaoiTemplate in GenresArray:
 			IsYaoi = True
 	
+	# Структура файла JSON, описывающего тайтл.
 	JSON = { 
 		"id" : int(SiteWindowData["manga"]["id"]), 
 		"img" : {
@@ -724,15 +773,15 @@ def GetMangaData(Browser, MangaName, Settings):
 			"mid": "",
 			"low": ""
 		}, 
-		"en_name": MangaNameEN,
-		"rus_name": MangaNameRU, 
-		"another_name": AnotherName,
+		"en_name": TitleName_EN,
+		"rus_name": TitleName_RU, 
+		"another_name": AlternativeNames,
 		"dir": MangaName,
 		"description": Description,
 		"issue_year": PublicationYear,
 		"avg_rating": Rating,
 		"admin_rating": "",
-		"count_rating": Voted,
+		"count_rating": VotedCount,
 		"age_limit": AgeLimit,
 		"status": {
 			"id": 0,
@@ -979,7 +1028,7 @@ def GetBranchesDescriptionStruct(Browser, Settings, MangaName, True_BranchesID):
 		# Присвоение синтетического BranchID.
 		BuferBranch["id"] = TrueToSyntBranchID(True_BranchesID[i], MangaName)
 		# Аватар переводчика.
-		BuferBranch["img"] = Settings["domain"][:-1] + SmallSoup.find('div', {'class': 'team-list-item__cover'})['style'].split('(')[-1].split(')')[0].replace('"', '')
+		BuferBranch["img"] = Settings["domain"][:-1] + SmallSoup.find('div', {"class": "team-list-item__cover"})["style"].split('(')[-1].split(')')[0].replace('"', '')
 		# Создание контейнера для переводчиков.
 		BuferBranch["publishers"] = []
 		# Есть ли подписка (не определяется).
@@ -992,7 +1041,7 @@ def GetBranchesDescriptionStruct(Browser, Settings, MangaName, True_BranchesID):
 		# ID переводчика (не определяется).
 		PublisherInfo["id"] = 0
 		# Название переводчика.
-		PublisherInfo["name"] = RemoveSpaceSymbols(RemoveHTML(SmallSoup.find('span')))
+		PublisherInfo["name"] = RemoveSpaceSymbols(RemoveHTML(SmallSoup.find("span")))
 		# Копирование ссылки на аватар переводчика.
 		PublisherInfo["img"] = BuferBranch["img"]
 		# Директория переводчика на сервере.

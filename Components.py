@@ -51,7 +51,7 @@ def ParceTitle(Browser, MangaName, Settings, ShowProgress, ForceMode):
 			logging.info("Parcing: \"" + MangaName + "\". Already exists. Will be overwritten...")
 
 		#Получение данных о манге.
-		JSON = GetMangaData(Browser, MangaName, Settings)
+		JSON = GetMangaData(Browser, Settings, MangaName)
 		IsPaid = IsMangaPaid(Browser, MangaName, Settings)
 		BranchesCount = len(JSON["branches"])
 
