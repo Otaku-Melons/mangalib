@@ -6,6 +6,7 @@ from selenium.webdriver.common.by import By
 from bs4 import BeautifulSoup
 from PIL import ImageFile
 from sys import platform
+from urllib import parse
 from time import sleep
 from PIL import Image
 
@@ -193,8 +194,21 @@ def CheckBranchOnSiteForEmpty(Browser, Settings, MangaName, True_BranchID):
 	else:
 		return False
 
-# Выполнение, если указано настройками, входа на сайт и отключение уведомления о возрастном ограничении.
-def SignInAndDisableWarning(Browser, Settings):
+# Получает UserID.
+def GetUserID(Browser, Settings):
+	# Переход на страницу тайтла.
+	Browser.find_elements(By.CLASS_NAME, "link-default")[1].click()
+	# Ожидание загрузки страницы.
+	WebDriverWait(Browser, 60).until(EC.visibility_of_element_located((By.CLASS_NAME, "media-name__body")))
+	# Получение URL.
+	CurrentURL = Browser.current_url
+	# Получение UserID из аргументов URL.
+	Settings["user-id"] = int(parse.parse_qs(parse.urlparse(CurrentURL).query)["ui"][0])
+	# Запись в лог сообщения об автоматическом получении UserID.
+	logging.info("UserID automatically set as " + str(Settings["user-id"]) + ".")
+
+# Вход на сайт и получение ID пользователя, если указано настройками.
+def Authorization(Browser, Settings):
 	# Если включён вход на сайт.
 	if Settings["sign-in"] == True:
 		# Проверка присутствия логина и пароля.
@@ -207,12 +221,13 @@ def SignInAndDisableWarning(Browser, Settings):
 			# Вывод в лог ошибки: некорректные данные пользователя.
 			logging.error("Uncorrect user data! Check \"Settings.json\".")
 
-	# Если включено отключение уведомления о возрастном ограничении.
-	if Settings["disable-age-limit-warning"] == True:
-		# Отключить уведомление.
-		DisableAgeLimitWarning(Browser, Settings)
-		# Запись в лог сообщения об отключении уведомления.
-		logging.info("Age limit warning disabled.")
+	# Если не указан UserID, то получить его самостоятельно.
+	if Settings["user-id"] == None:
+		GetUserID(Browser, Settings)
+	else:
+		# Запись в лог сообщения об установке UserID.
+		logging.info("UserID set as " + str(Settings["user-id"]) + ".")
+
 
 #Возвращает результат проверки тайтла на платность.
 def IsMangaPaid(Browser, MangaName, Settings):
@@ -288,23 +303,6 @@ def GetPublisherData(Div, Domain):
 	Bufer['type'] = 'Переводчик'
 	return Bufer
 
-# Отключает уведомление о возрастном ограничении.
-def DisableAgeLimitWarning(Browser, Settings):
-	# Переключение между способами отключения уведомления в зависимости от домена.
-	if Settings["domain"] == "https://mangalib.me/":
-		Browser.get("https://mangalib.me/kimetsu-no-yaiba/v1/c1?page=1")
-
-	elif Settings["domain"] == "https://hentailib.me/": 
-		# Поиск последней добавленной на сайт главы и переход к ней кликом по ссылке.
-		Browser.find_elements(By.CLASS_NAME, "updates__chapter")[1].click()
-
-	elif Settings["domain"] == "https://yaoilib.me/": 
-		Browser.get("https://yaoilib.me/you-are-here/v1/c151?page=1")
-	
-	# Поиск и нажатие на кнопку сокрытия уведомления.
-	Browser.find_elements(By.CLASS_NAME, "control__text")[-1].click()
-	Browser.find_element(By.CLASS_NAME, 'reader-caution-continue').click()
-
 # Получает истинные ID ветвей переводов.
 def GetBranchesID(Browser, MangaName, Settings):
 	# Переход на страницу с информацией о тайтле.
@@ -345,7 +343,7 @@ def PrepareToParcingChapters(Browser, Settings, MangaName, True_BranchID):
 	# Поиск ссылки на самую свежую главу.
 	LastChapter = Soup.find("a")
 
-	# Переход к самой свежей главе главе.
+	# Переход к самой свежей главе.
 	Browser.get(Settings["domain"][:-1] + LastChapter["href"])
 	# Поиск кнопки для открытия блока с главами.
 	ChaptersSpoilerButton = Browser.find_elements(By.CLASS_NAME, "reader-header-action__text")
@@ -394,7 +392,11 @@ def GetChaptersLinks(Browser):
 # Получает список слайдов главы из JS-данных страницы и определяет их размеры в пикселях.
 def GetMangaSlidesUrlList(Browser, Settings, ChapterLink, Logging = True):
 	# Переход на страницу главы.
-	Browser.get(Settings["domain"][:-1] + ChapterLink)
+	if '?' in ChapterLink:
+		Browser.get(Settings["domain"][:-1] + ChapterLink + "&ui=" + str(Settings["user-id"]))
+	else:
+		Browser.get(Settings["domain"][:-1] + ChapterLink + "?ui=" + str(Settings["user-id"]))
+
 	# Ожидание загрузки JS данных о главе.
 	WebDriverWait(Browser, 60).until(EC.presence_of_element_located, (By.ID , "pg"))
 	# Получение JS инофрмации о странице.

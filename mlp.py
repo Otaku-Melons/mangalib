@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.9
+#!/usr/bin/python
 
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.options import Options
@@ -14,10 +14,10 @@ import time
 import sys
 import os
 
-from BaseFunctions import SignInAndDisableWarning
 from BaseFunctions import GetContentServersList
 from BaseFunctions import SecondsToTimeString
 from BaseFunctions import GetSynt_BranchID
+from BaseFunctions import Authorization
 from BaseFunctions import Shutdown
 from BaseFunctions import Cls
 
@@ -27,6 +27,16 @@ from Components import UpdateTitle
 from Components import ParceTitle
 from Components import ScanTitles
 from Components import Amend
+
+#==========================================================================================#
+# >>>>> ПРОВЕРКА ВЕРСИИ PYTHON <<<<< #
+#==========================================================================================#
+
+# Минимальная требуемая версия Python.
+PythonMinimalVersion = (3, 9)
+# Проверка соответствия.
+if sys.version_info < PythonMinimalVersion:
+	sys.exit("Python %s.%s or later is required.\n" % PythonMinimalVersion)
 
 #==========================================================================================#
 # >>>>> ИНИЦИАЛИЗАЦИЯ ЛОГОВ <<<<< #
@@ -70,6 +80,8 @@ Browser.set_window_size(1920, 1080)
 
 # Вывод в лог заголовка: подготовка скрипта к работе.
 logging.info("====== Prepare to starting ======")
+# Запись в лог используемой версии Python.
+logging.info("Starting with Python " + str(sys.version_info.major) + "." + str(sys.version_info.minor) + "." + str(sys.version_info.micro) + " on " + str(sys.platform) + ".")
 # Запись времени начала работы скрипта.
 logging.info("Script started at " + str(CurrentDate)[:-7] + ".")
 # Запись команды, использовавшейся для запуска скрипта.
@@ -77,51 +89,52 @@ logging.info("Launch command: \"" + " ".join(sys.argv[1:len(sys.argv)]) + "\".")
 # Инициализация хранилища настроек со стадартными значениями.
 Settings = {
 	"domain": "mangalib",
-    "directory" : "",
-    "scan-target" : "",
-    "disable-age-limit-warning": True,
-    "sign-in": False,
-    "email": "",
-    "password": "",
-    "delay": 5,
-    "getting-slide-sizes": False,
-    "server": "main"
+	"directory" : "",
+	"scan-target" : "",
+	"disable-age-limit-warning": True,
+	"sign-in": False,
+	"user-id": None,
+	"email": "",
+	"password": "",
+	"delay": 5,
+	"getting-slide-sizes": False,
+	"server": "main"
 }
 
 # Открытие файла настроек.
 try:
 	with open("Settings.json") as FileRead:
-			Settings = json.load(FileRead)
-			# Проверка успешной загрузки файла.
-			if Settings == None:
-				# Запись в лог ошибки о невозможности прочитать битый файл.
-				logging.error("Unable to read \"Settings.json\". File is broken.")
+		Settings = json.load(FileRead)
+		# Проверка успешной загрузки файла.
+		if Settings == None:
+			# Запись в лог ошибки о невозможности прочитать битый файл.
+			logging.error("Unable to read \"Settings.json\". File is broken.")
+		else:
+			# Запись в лог сообщения об успешном чтении файла настроек.
+			logging.info("The settings file was found successfully.")
+
+			# Если директория загрузки не установлена, задать значение по умолчанию.
+			if Settings["directory"] == "":
+				# Установка директории по умолчанию на основе домена.
+				Settings["directory"] = Settings["domain"].replace("lib", "")
+				# Запись в лог сообщения об установке стандартной директории загрузки.
+				logging.info("Save directory set as default.")
 			else:
-				# Запись в лог сообщения об успешном чтении файла настроек.
-				logging.info("The settings file was found successfully.")
+				# Запись в лог сообщения об установке директории загрузки.
+				logging.info("Save directory set as " + Settings["directory"] + ".")
 
-				# Если директория загрузки не установлена, задать значение по умолчанию.
-				if Settings["directory"] == "":
-					# Установка директории по умолчанию на основе домена.
-					Settings["directory"] = Settings["domain"].replace("lib", "")
-					# Запись в лог сообщения об установке стандартной директории загрузки.
-					logging.info("Save directory set as default.")
-				else:
-					# Запись в лог сообщения об установке директории загрузки.
-					logging.info("Save directory set as " + Settings["directory"] + ".")
+			# Если директория не существует, тогда создать её.
+			if os.path.exists(Settings["directory"]) == False:
+					os.makedirs(Settings["directory"])
 
-				# Если директория не существует, тогда создать её.
-				if os.path.exists(Settings["directory"]) == False:
-						os.makedirs(Settings["directory"])
+			# Преобразование названия домена в URL целевого сайта.
+			Settings["domain"] = "https://" + Settings["domain"] + ".me/"
+			# Запись в лог сообщения об установке домена.
+			logging.info("Domain set as \"" + Settings["domain"] + "\".")
 
-				# Преобразование названия домена в URL целевого сайта.
-				Settings["domain"] = "https://" + Settings["domain"] + ".me/"
-				# Запись в лог сообщения об установке домена.
-				logging.info("Domain set as \"" + Settings["domain"] + "\".")
-
-				# Вывести сообщение об отключеннии получения размеров слайдов.
-				if Settings["getting-slide-sizes"] == False:
-					logging.info("Images sizing is disabled.")
+			# Вывести сообщение об отключеннии получения размеров слайдов.
+			if Settings["getting-slide-sizes"] == False:
+				logging.info("Images sizing is disabled.")
 
 except EnvironmentError:
 	# Запись в лог ошибки о невозможности открытия файла настроек.
@@ -190,8 +203,8 @@ if "-am" in sys.argv:
 
 # Двухкомпонентные команды: parce, update, getsl, ubid, scan.
 if len(sys.argv) >= 3:
-	# Вход на сайт и отключение уведомления о возрастном ограничении согласно настройкам.
-	SignInAndDisableWarning(Browser, Settings)
+	# Вход на сайт и получение ID пользователя, если указано настройками.
+	Authorization(Browser, Settings)
 
 	# Парсинг тайтлов.
 	if sys.argv[1] == "parce":
