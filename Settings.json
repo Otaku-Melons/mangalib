@@ -1,13 +1,9 @@
 {
-    "domain": "mangalib",
-    "directory" : "",
-    "scan-target" : "",
-    "sign-in": false,
-    "user-id": null,
-    "email": "",
-    "password": "",
-    "delay": 5,
-    "getting-slide-sizes": false,
-    "server": "fourth",
-    "logs-cleanup": true
+	"email": "",
+	"password": "",
+	"use-id-instead-slug": false,
+	"check-updates-period": 2,
+	"covers-directory": "",
+	"titles-directory": "",
+	"delay": 1
 }

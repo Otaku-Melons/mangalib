@@ -1,7 +1,12 @@
-hentai
-manga
-yaoi
-logs
-.wdm
+# Visual Studio project files.
+MangaLibParser.pyproj
+MangaLibParser.sln
+.vs
+
+# Parced titles data.
+Covers
+Titles
+Logs
+
+# Python cache.
 __pycache__
-MangaLib Parser.pyproj
