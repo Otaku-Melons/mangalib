@@ -8,7 +8,7 @@ import logging
 import json
 import os
 
-# Перечень жанров.
+# Список жанров.
 GENRES = [
 	"арт",	
 	"безумие",	
@@ -287,7 +287,7 @@ class TitleParser:
 		# Блок описания.
 		DescriptionBlock = Page.find("div", {"class": "media-description__text"})
 		# Описание.
-		Description = RemoveRecurringSubstrings(DescriptionBlock.get_text().strip(), "\n\n")
+		Description = RemoveRecurringSubstrings(DescriptionBlock.get_text().strip().replace("\r", ""), "\n\n")
 
 		return Description
 	
