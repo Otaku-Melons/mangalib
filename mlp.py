@@ -94,6 +94,13 @@ COM_parse.addFlagPosition(["s"])
 COM_parse.addKeyPosition(["from"], ArgumentType.All)
 CommandsList.append(COM_parse)
 
+# Создание команды: repair.
+COM_repair = Command("repair")
+COM_repair.addArgument(ArgumentType.All, Important = True)
+COM_repair.addKeyPosition(["chapter"], ArgumentType.Number, Important = True)
+COM_repair.addFlagPosition(["s"])
+CommandsList.append(COM_repair)
+
 # Инициализация обработчика консольных аргументов.
 CAC = Terminalyzer()
 # Получение информации о проверке команд.
@@ -235,6 +242,27 @@ if "parse" == CommandDataStruct.Name:
 		LocalTitle.downloadCover()
 		# Сохранение локальных файлов тайтла.
 		LocalTitle.save()
+		
+# Обработка команды: repair.
+if "repair" == CommandDataStruct.Name:
+	# Запись в лог сообщения: восстановление.
+	logging.info("====== Repairing ======")
+	# Название файла тайтла с расширением.
+	Filename = (CommandDataStruct.Arguments[0] + ".json") if ".json" not in CommandDataStruct.Arguments[0] else CommandDataStruct.Arguments[0]
+	# Чтение тайтла.
+	TitleContent = ReadJSON(Settings["titles-directory"] + Filename)
+	# Генерация сообщения.
+	ExternalMessage = InFuncMessage_Shutdown
+	# Вывод в консоль: идёт процесс восстановления главы.
+	print("Repairing chapter...")
+	# Алиас тайтла.
+	TitleSlug = TitleContent["slug"]
+	# Парсинг тайтла.
+	LocalTitle = TitleParser(Settings, Requestor, TitleSlug, ForceMode = False, Message = ExternalMessage, Amending = False)
+	# Восстановление главы.
+	LocalTitle.repairChapter(CommandDataStruct.Values["chapter"])
+	# Сохранение локальных файлов тайтла.
+	LocalTitle.save()
 
 #==========================================================================================#
 # >>>>> ЗАВЕРШЕНИЕ РАБОТЫ СКРИПТА <<<<< #

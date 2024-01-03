@@ -3,7 +3,7 @@
 	"password": "",
 	"use-id-instead-slug": false,
 	"check-updates-period": 2,
-	"covers-directory": "",
 	"titles-directory": "",
+	"covers-directory": "",
 	"delay": 1
 }

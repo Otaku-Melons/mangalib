@@ -85,43 +85,30 @@ class TitleParser:
 			TotalChaptersCount += Branch["chapters-count"]
 		
 		# Для каждой ветви.
-		for BranchID in self.__Title["chapters"]:
+		for BranchID in self.__Title["chapters"].keys():
 			
 			# Для каждый главы.
-			for ChepterIndex in range(0, len(self.__Title["chapters"][BranchID])):
+			for ChapterIndex in range(0, len(self.__Title["chapters"][BranchID])):
 				# Инкремент глобального индекса текущей главы.
 				CurrentChapterIndex += 1
 				# Очистка консоли.
 				Cls()
 				# Вывод в консоль: сообщение из внешнего обработчика и прогресс.
 				print(self.__Message + "\n" + f"Amending: {CurrentChapterIndex} / {TotalChaptersCount}")
-				# Запрос данных главы.
-				Response = self.__Requestor.get(f"https://{self.__Domain}/download/" + str(self.__Title["chapters"][BranchID][ChepterIndex]["id"]))
-				# Конвертирование ответа в словарь.
-				Data = json.loads(Response.text)
-				# Выжидание интервала.
-				sleep(self.__Settings["delay"])
 				
 				# Если слайды не описаны или включён режим перезаписи.
-				if self.__Title["chapters"][BranchID][ChepterIndex]["slides"] == [] or self.__ForceMode == True:
-				
-					# Для каждого изображения.
-					for ImageIndex in range(0, len(Data["images"])):
-						# Буфер слайда.
-						Bufer = {
-							"index": ImageIndex + 1,
-							"link": Data["downloadServer"] + "/manga/" + self.__Title["slug"] + "/chapters/" + str(self.__Title["chapters"][BranchID][ChepterIndex]["id"]) + "/" + Data["images"][ImageIndex],
-							"width": None,
-							"height": None
-						}
-						# Запись информации о слайде.
-						self.__Title["chapters"][BranchID][ChepterIndex]["slides"].append(Bufer)
-						
+				if self.__Title["chapters"][BranchID][ChapterIndex]["slides"] == [] or self.__ForceMode == True:
+					# Получение списка слайдов главы.
+					Slides = self.__GetChapterSlides(self.__Title["chapters"][BranchID][ChapterIndex]["id"])
 					# Инкремент количества обновлённых глав.
 					AmendedChaptersCount += 1
 					# Запись в лог сообщения: глава дополнена.
-					logging.info("Title: \"" + self.__Slug + "\". Chapter " + str(self.__Title["chapters"][BranchID][ChepterIndex]["id"]) + " amended.")
-				
+					logging.info("Title: \"" + self.__Slug + "\". Chapter " + str(self.__Title["chapters"][BranchID][ChapterIndex]["id"]) + " amended.")
+					# Запись информации о слайде.
+					self.__Title["chapters"][BranchID][ChapterIndex]["slides"].append(Slides)
+					# Выжидание интервала.
+					sleep(self.__Settings["delay"])
+
 		# Запись в лог сообщения: завершение дополнения.
 		logging.info("Title: \"" + self.__Slug + f"\". Amended {AmendedChaptersCount} chapters.")
 
@@ -260,6 +247,29 @@ class TitleParser:
 				Author = Block.get_text().replace("Автор", "").strip()
 	
 		return Author
+	
+	# Возвращает список слайдов главы.
+	def __GetChapterSlides(self, ChapterID: int | str) -> list[dict]:
+		# Запрос данных главы.
+		Response = self.__Requestor.get(f"https://{self.__Domain}/download/{ChapterID}")
+		# Конвертирование ответа в словарь.
+		Data = json.loads(Response.text)
+		# Список слайдов.
+		Slides = list()
+		
+		# Для каждого изображения.
+		for ImageIndex in range(0, len(Data["images"])):
+			# Буфер слайда.
+			Bufer = {
+				"index": ImageIndex + 1,
+				"link": Data["downloadServer"] + "/manga/" + self.__Title["slug"] + f"/chapters/{ChapterID}/" + Data["images"][ImageIndex],
+				"width": None,
+				"height": None
+			}
+			# Запись информации о слайде.
+			Slides.append(Bufer)
+			
+		return Slides
 	
 	# Возвращает описание обложки.
 	def __GetCover(self, Page: str) -> dict:
@@ -513,11 +523,7 @@ class TitleParser:
 							MergedChaptersCount += 1
 						
 				# Запись в лог сообщения: завершение слияния.
-				logging.info("Title: \"" + self.__Slug + "\". Merged chapters: " + str(MergedChaptersCount) + ".")
-				
-			else:
-				# Запись в лог сообщения: найден локальный описательный файл тайтла.
-				logging.info("Title: \"" + self.__Slug + "\". Local JSON already exists. Will be overwritten...")
+				logging.info("Title: \"" + self.__Slug + "\". Merged chapters: " + str(MergedChaptersCount) + ".")			
 	
 	# Конструктор.
 	def __init__(self, Settings: dict, Requestor: WebRequestor, Slug: str, ForceMode: bool = False, Message: str = "", Amending: bool = True):
@@ -575,11 +581,19 @@ class TitleParser:
 		self.__GetTitle()
 		
 		# Если тайтл доступен.
-		if self.__IsActive == True and Amending == True:
-			# Попытка слияния.
-			self.__Merge()
-			# Дополнение глав.
-			self.__Amend()
+		if self.__IsActive == True:
+			
+			# Если отключен режим перезаписи.
+			if ForceMode == False:
+				# Попытка слияния.
+				self.__Merge()
+				
+			else:
+				# Запись в лог сообщения: найден локальный описательный файл тайтла.
+				logging.info("Title: \"" + self.__Slug + "\". Local JSON already exists. Will be overwritten...")
+			
+			# Если включено дополнение глав, то дополнить.
+			if Amending == True: self.__Amend()
 		
 	# Загружает обложку.
 	def downloadCover(self):
@@ -650,6 +664,37 @@ class TitleParser:
 		else:
 			# Запись в лог сообщения: обложка уже загружена.
 			logging.info("Title: \"" + self.__Slug + "\". Cover already exists. Skipped.")
+			
+	# Пересобирает слайды главы.
+	def repairChapter(self, ChapterID: int | str):
+		# Приведение ID главы к целочисленному.
+		ChapterID = int(ChapterID)
+		# Состояние: восстановлена ли глава.
+		IsRepaired = False		
+
+		# Для каждой ветви.
+		for BranchID in self.__Title["chapters"].keys():
+			
+			# Для каждый главы.
+			for ChapterIndex in range(0, len(self.__Title["chapters"][BranchID])):
+				
+				# Если ID совпадает с искомым.
+				if self.__Title["chapters"][BranchID][ChapterIndex]["id"] == ChapterID:
+					# Переключение состояния.
+					IsRepaired = True
+					# Получение списка слайдов главы.
+					Slides = self.__GetChapterSlides(self.__Title["chapters"][BranchID][ChapterIndex]["id"])
+					# Запись в лог сообщения: глава дополнена.
+					logging.info("Title: \"" + self.__Slug + "\". Chapter " + str(self.__Title["chapters"][BranchID][ChapterIndex]["id"]) + " repaired.")
+					# Запись информации о слайде.
+					self.__Title["chapters"][BranchID][ChapterIndex]["slides"] = Slides
+					
+		# Если глава восстановлена.
+		if IsRepaired == False:
+			# Запись в лог критической ошибки: глава не найдена.
+			logging.critical("Title: \"" + self.__Slug + f"\". Chapter {ChapterID} not found.")
+			# Выброс исключения.
+			raise Exception(f"Chapter with ID {ChapterID} not found.")
 	
 	# Сохраняет JSON файл описания.
 	def save(self):
