@@ -1,13 +1,14 @@
 from dublib.WebRequestor import WebRequestor
 from bs4 import BeautifulSoup
 
+import datetime
 import logging
 
 # Выполняет авторизацию.
 def Authorizate(Settings: dict, Requestor: WebRequestor, Domain: str):
 	
 	# Если указаны логин и пароль.
-	if type(Settings["email"]) == str and len(Settings["email"]) > 0 and type(Settings["password"]) == str and len(Settings["password"]) > 0:
+	if type(Settings["login"]) == str and len(Settings["login"]) > 0 and type(Settings["password"]) == str and len(Settings["password"]) > 0:
 		
 		try:
 			# Запрос страницы авторизации.
@@ -17,7 +18,7 @@ def Authorizate(Settings: dict, Requestor: WebRequestor, Domain: str):
 			# Получение токена страницы.
 			Token = BeautifulSoup(Response.text, "html.parser").find("meta", {"name": "_token"})["content"]
 			# Данные авторизации.
-			Data = f"_token={Token}&email=" + Settings["email"] + "&password=" + Settings["password"] + f"&remember=on&from=https%3A%2F%2F{Domain}%2F"
+			Data = f"_token={Token}&email=" + Settings["login"] + "&password=" + Settings["password"] + f"&remember=on&from=https%3A%2F%2F{Domain}%2F"
 			# Заголовки запроса.
 			Headers = {
 				"Origin": "https://lib.social",
@@ -30,10 +31,6 @@ def Authorizate(Settings: dict, Requestor: WebRequestor, Domain: str):
 		except Exception as ExceptionData:
 			# Запись в лог ошибки: не удалось выполнить авторизацию.
 			logging.error("Unable to authorizate. Description: \"" + str(ExceptionData).rstrip(".") + "\".")
-
-# Усекает число до определённого количества знаков после запятой.
-def ToFixedFloat(FloatNumber: float, Digits: int = 0) -> float:
-	return float(f"{FloatNumber:.{Digits}f}")
 
 # Проевращает число секунд в строку-дескриптор времени по формату [<x> hours <y> minuts <z> seconds].
 def SecondsToTimeString(Seconds: float) -> str:
@@ -58,9 +55,25 @@ def SecondsToTimeString(Seconds: float) -> str:
 
 	return TimeString
 
+# Усекает число до определённого количества знаков после запятой.
+def ToFixedFloat(FloatNumber: float, Digits: int = 0) -> float:
+	return float(f"{FloatNumber:.{Digits}f}")
+
 # Переобразует значение в int.
 def ToInt(Value: int | None) -> int:
 	# Приведение к int.
 	Value = 0 if Value == None else int(Value)
 
 	return Value
+
+# Преобразует строку времени в объект datetime.
+def TimeToDatetime(Time: str) -> datetime.datetime:
+	# Парсинг строки в объект времени.
+	Object = datetime.datetime(
+		year = int(Time.split("-")[0]),
+		month = int(Time.split("-")[1]),
+		day = int(Time.split("-")[2].split("T")[0]),
+		hour = int(Time.split("T")[-1].split(":")[0])
+	)	
+	
+	return Object

@@ -3,6 +3,7 @@ from dublib.Terminalyzer import ArgumentType, Command, Terminalyzer
 from Source.Functions import Authorizate, SecondsToTimeString
 from dublib.WebRequestor import HttpxConfig, WebRequestor, RequestsConfig
 from Source.TitleParser import TitleParser
+from Source.Updater import Updater
 
 import datetime
 import logging
@@ -36,6 +37,8 @@ logging.basicConfig(filename = LogFilename, encoding = "utf-8", level = logging.
 logging.getLogger("requests").setLevel(logging.CRITICAL)
 # Отключение части сообщений логов библиотеки urllib3.
 logging.getLogger("urllib3").setLevel(logging.CRITICAL)
+# Отключение части сообщений логов библиотеки httpx.
+logging.getLogger("httpx").setLevel(logging.CRITICAL)
 
 #==========================================================================================#
 # >>>>> ЧТЕНИЕ НАСТРОЕК <<<<< #
@@ -102,6 +105,15 @@ COM_repair.addKeyPosition(["chapter"], ArgumentType.Number, Important = True)
 COM_repair.addFlagPosition(["s"])
 CommandsList.append(COM_repair)
 
+# Создание команды: update.
+COM_update = Command("update")
+COM_update.addFlagPosition(["onlydesc"])
+COM_update.addFlagPosition(["h", "y"])
+COM_update.addFlagPosition(["f"])
+COM_update.addFlagPosition(["s"])
+COM_update.addKeyPosition(["from"], ArgumentType.All)
+CommandsList.append(COM_update)
+
 # Инициализация обработчика консольных аргументов.
 CAC = Terminalyzer()
 # Получение информации о проверке команд.
@@ -149,10 +161,13 @@ if "h" in CommandDataStruct.Flags:
 	# Изменение домена.
 	Domain = "hentailib.me"
 	
-elif "y" in CommandDataStruct.Flags:
+# Обработка флага: парсинг яоя.
+if "y" in CommandDataStruct.Flags:
 	# Изменение домена.
-	Domain = "hentailib.me"
+	Domain = "yaoilib.me"
 	
+# Сообщение для внутренних функций: домен.
+InFuncMessage_Domain = f"Domain: {Domain}\n"
 # Запись в лог сообщения: выбранный домен.
 logging.info(f"Domain: \"{Domain}\".")
 
@@ -185,7 +200,7 @@ if "getcov" == CommandDataStruct.Name:
 	# Запись в лог сообщения: заголовок парсинга.
 	logging.info("====== Parsing ======")
 	# Парсинг тайтла (без глав).
-	LocalTitle = TitleParser(Settings, Requestor, CommandDataStruct.Arguments[0], Domain, ForceMode = IsForceModeActivated, Message = InFuncMessage_Shutdown + InFuncMessage_ForceMode, Amending = False)
+	LocalTitle = TitleParser(Settings, Requestor, CommandDataStruct.Arguments[0], Domain, ForceMode = IsForceModeActivated, Message = InFuncMessage_Shutdown + InFuncMessage_ForceMode + InFuncMessage_Domain, Amending = False)
 	# Сохранение локальных файлов тайтла.
 	LocalTitle.downloadCover()
 
@@ -248,11 +263,11 @@ if "parse" == CommandDataStruct.Name:
 		# Часть сообщения о прогрессе.
 		InFuncMessage_Progress = "Parcing titles: " + str(Index + 1) + " / " + str(len(TitlesList)) + "\n"
 		# Генерация сообщения.
-		ExternalMessage = InFuncMessage_Shutdown + InFuncMessage_ForceMode + InFuncMessage_Progress if len(TitlesList) > 1 else InFuncMessage_Shutdown + InFuncMessage_ForceMode
+		ExternalMessage = InFuncMessage_Shutdown + InFuncMessage_ForceMode + InFuncMessage_Domain + InFuncMessage_Progress if len(TitlesList) > 1 else InFuncMessage_Shutdown + InFuncMessage_ForceMode + InFuncMessage_Domain
 		# Парсинг тайтла.
 		LocalTitle = TitleParser(Settings, Requestor, TitlesList[Index], Domain, ForceMode = IsForceModeActivated, Message = ExternalMessage)
 		# Загружает обложку тайтла.
-		#LocalTitle.downloadCover()
+		LocalTitle.downloadCover()
 		# Сохранение локальных файлов тайтла.
 		LocalTitle.save()
 		
@@ -276,6 +291,61 @@ if "repair" == CommandDataStruct.Name:
 	LocalTitle.repairChapter(CommandDataStruct.Values["chapter"])
 	# Сохранение локальных файлов тайтла.
 	LocalTitle.save()
+	
+# Обработка команды: update.
+if "update" == CommandDataStruct.Name:
+	# Запись в лог сообщения: получение списка обновлений.
+	logging.info("====== Updating ======")
+	# Индекс стартового алиаса.
+	StartIndex = 0
+	# Инициализация проверки обновлений.
+	UpdateChecker = Updater(Settings, Requestor, Domain)
+	# Получение списка обновлённых тайтлов.
+	TitlesList = UpdateChecker.getUpdatesList()
+		
+	# Если указан стартовый тайтл.
+	if "from" in CommandDataStruct.Keys:
+		# Запись в лог сообщения: стартовый тайтл обновления.
+		logging.info("Updating starts from title with slug: \"" + CommandDataStruct.Values["from"] + "\".")
+				
+		# Если стартовый алиас найден.
+		if CommandDataStruct.Values["from"] in TitlesList:
+			# Указать индекс алиаса в качестве стартового.
+			StartIndex = TitlesList.index(CommandDataStruct.Values["from"])
+			
+		else:
+			# Запись в лог предупреждения: стартовый алиас не найден.
+			logging.warning("Unable to find start slug. All titles skipped.")
+			# Пропустить все тайтлы.
+			StartIndex = len(TitlesList)
+			
+	# Запись в лог сообщения: заголовок парсинга.
+	logging.info("====== Parsing ======")
+	
+	# Парсинг обновлённых тайтлов.
+	for Index in range(StartIndex, len(TitlesList)):
+		# Очистка терминала.
+		Cls()
+		# Вывод в терминал прогресса.
+		print("Updating titles: " + str(Index + 1) + " / " + str(len(TitlesList)))
+		# Генерация сообщения.
+		ExternalMessage = InFuncMessage_Shutdown + InFuncMessage_ForceMode + InFuncMessage_Domain + "Updating titles: " + str(Index + 1) + " / " + str(len(TitlesList)) + "\n"
+		# Локальный описательный файл.
+		LocalTitle = None
+			
+		# Если включено обновление только описания.
+		if "onlydesc" in CommandDataStruct.Flags:
+			# Парсинг тайтла (без глав).
+			LocalTitle = TitleParser(Settings, Requestor, TitlesList[Index], Domain, ForceMode = IsForceModeActivated, Message = ExternalMessage, Amending = False)
+				
+		else:
+			# Парсинг тайтла.
+			LocalTitle = TitleParser(Settings, Requestor, TitlesList[Index], Domain, ForceMode = IsForceModeActivated, Message = ExternalMessage)
+				
+		# Сохранение локальных файлов тайтла.
+		LocalTitle.save()
+		# Выжидание указанного интервала, если не все тайтлы обновлены.
+		if Index < len(TitlesList): time.sleep(Settings["delay"])
 
 #==========================================================================================#
 # >>>>> ЗАВЕРШЕНИЕ РАБОТЫ СКРИПТА <<<<< #

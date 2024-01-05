@@ -1,9 +1,9 @@
 {
-	"email": "",
+	"login": "",
 	"password": "",
-	"use-id-instead-slug": false,
 	"user-id": 0,
-	"check-updates-period": 2,
+	"use-id-instead-slug": false,
+	"check-updates-period": 24,
 	"titles-directory": "",
 	"covers-directory": "",
 	"delay": 1

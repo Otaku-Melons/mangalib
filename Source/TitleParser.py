@@ -1,5 +1,5 @@
-from dublib.WebRequestor import WebRequestor
 from dublib.Methods import Cls, ReadJSON, RemoveFolderContent, RemoveRecurringSubstrings, WriteJSON
+from dublib.WebRequestor import WebRequestor
 from Source.Functions import ToInt
 from bs4 import BeautifulSoup
 from time import sleep
@@ -388,6 +388,28 @@ class TitleParser:
 	
 		return Year
 	
+	# Возвращает список серий.
+	def __GetSeries(self, Page: str) -> list:
+		# Поиск медиа блоков.
+		MediaBlocks = Page.find_all("div", {"class": "media-info-list__item"})
+		# Список серий.
+		Series = list()
+		
+		# Для каждого блока.
+		for Block in MediaBlocks:
+			
+			# Если блок содержит список серий.
+			if "Серия" in str(Block):
+				# Поиск ссылок на серии.
+				SeriesLinks = Block.find_all("a")
+				
+				# Для каждой ссылки.
+				for Link in SeriesLinks:
+					# Запись серии.
+					Series.append(Link.get_text().strip())
+	
+		return Series
+	
 	# Возвращает словарь серверов изображений.
 	def __GetServersList(self, Page: str) -> dict | None:
 		# Поиск блоков скриптов.
@@ -443,7 +465,7 @@ class TitleParser:
 		Tags = list()
 		
 		# Для каждой ссылки сохранить название тега.
-		for Link in TagsLinks: Tags.append(Link.get_text().strip().lower())
+		for Link in TagsLinks: AllTags.append(Link.get_text().strip().lower())
 		
 		# Для каждого тега.
 		for Index in range(0, len(AllTags)):
@@ -467,12 +489,12 @@ class TitleParser:
 			# Получение данных тайтла.
 			self.__Data = self.__GetTitleData(Page)
 			# Заполнение описания тайтла.
-			self.__Title["site"] = "mangalib.me"
+			self.__Title["site"] = self.__Domain
 			self.__Title["id"] = self.__Data["manga"]["id"]
 			self.__Title["slug"] = self.__Slug
 			self.__Title["covers"] = list()
-			self.__Title["ru-name"] = self.__Data["manga"]["rusName"]
-			self.__Title["en-name"] = self.__Data["manga"]["engName"]
+			self.__Title["ru-name"] = self.__Data["manga"]["rusName"] if self.__Data["manga"]["rusName"] != "" else None
+			self.__Title["en-name"] = self.__Data["manga"]["engName"] if self.__Data["manga"]["engName"] != "" else None
 			self.__Title["another-names"] = self.__Data["manga"]["altNames"]
 			self.__Title["author"] = self.__GetAuthor(Page)
 			self.__Title["publication-year"] = self.__GetPublicationYear(Page)
@@ -481,7 +503,7 @@ class TitleParser:
 			self.__Title["type"] = self.__GetType(Page)
 			self.__Title["status"] = self.__GetStatus(Page, self.__Data)
 			self.__Title["is-licensed"] = self.__CheckLicense(Page)
-			self.__Title["series"]
+			self.__Title["series"] = self.__GetSeries(Page)
 			self.__Title["genres"] = self.__GetGenres(Page)
 			self.__Title["tags"] = self.__GetTags(Page)
 			self.__Title["branches"] = self.__BuildBranches(self.__Data)
@@ -674,8 +696,8 @@ class TitleParser:
 			if Amending == True: self.__Amend()
 			
 		else:
-			# Запись в лог ошибки: тайтл не найден.
-			logging.error("Title: \"" + self.__Slug + "\". Not found. Skipped.")
+			# Запись в лог ошибки: нет доступа к тайтлу.
+			logging.error("Title: \"" + self.__Slug + "\". Not accessed. Skipped.")
 		
 	# Загружает обложку.
 	def downloadCover(self):
