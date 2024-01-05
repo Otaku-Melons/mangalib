@@ -98,8 +98,14 @@ class TitleParser:
 				
 				# Если слайды не описаны или включён режим перезаписи.
 				if self.__Title["chapters"][BranchID][ChapterIndex]["slides"] == [] or self.__ForceMode == True:
+					
 					# Получение списка слайдов главы.
-					Slides = self.__GetChapterSlides(self.__Title["chapters"][BranchID][ChapterIndex]["id"])
+					Slides = self.__GetChapterSlides(
+						self.__Title["chapters"][BranchID][ChapterIndex]["id"],
+						self.__Title["chapters"][BranchID][ChapterIndex]["number"],
+						self.__Title["chapters"][BranchID][ChapterIndex]["volume"],
+						BranchID[len(str(self.__Title["id"])):]
+					)
 					# Инкремент количества обновлённых глав.
 					AmendedChaptersCount += 1
 					# Запись в лог сообщения: глава дополнена.
@@ -123,7 +129,7 @@ class TitleParser:
 		for Chapter in Data["chapters"]["list"]:
 			
 			# Если глава не принадлежит ветви перевода.
-			if Chapter["branch_id"] == None:
+			if Chapter["branch_id"] == None and Chapter["chapter_name"] != None:
 				# ID ветви.
 				BranchID = str(self.__Title["id"]) + str(0)
 				
@@ -139,7 +145,7 @@ class TitleParser:
 						"chapters-count": 1
 					}
 				
-			else:
+			elif Chapter["chapter_name"] != None:
 				# ID ветви.
 				BranchID = str(self.__Title["id"]) + str(Chapter["branch_id"])
 				
@@ -183,20 +189,20 @@ class TitleParser:
 				"translator": None,
 				"slides": list()
 			}
-			# Генерация ID ветви.
-			BranchID = str(self.__Title["id"]) + str(ToInt(Chapter["branch_id"]))
 			
-			# Если глава принадлежит ветви.
-			if Chapter["branch_id"] != None:
+			# Если глава валидна.
+			if Chapter["chapter_name"] != None:
+				# Генерация ID ветви.
+				BranchID = str(self.__Title["id"]) + (str(ToInt(Chapter["branch_id"])) if Chapter["branch_id"] != None else "0")
 				
 				# Поиск нужной ветви.
 				for Branch in Data["chapters"]["branches"]:
 					
 					# Если найдена нужная ветвь, записать переводчика.
-					if Branch["id"] == Chapter["branch_id"]: Bufer["translator"] = Branch["teams"][0]["name"]
+					if Branch["id"] == Chapter["branch_id"] and len(Branch["teams"]) > 0: Bufer["translator"] = Branch["teams"][0]["name"]
 
-			# Запись главы.
-			Chapters[BranchID].append(Bufer)
+				# Запись главы.
+				Chapters[BranchID].append(Bufer)
 			
 		# Для каждой ветви.
 		for BranchID in Chapters.keys():
@@ -249,25 +255,63 @@ class TitleParser:
 		return Author
 	
 	# Возвращает список слайдов главы.
-	def __GetChapterSlides(self, ChapterID: int | str) -> list[dict]:
-		# Запрос данных главы.
-		Response = self.__Requestor.get(f"https://{self.__Domain}/download/{ChapterID}")
-		# Конвертирование ответа в словарь.
-		Data = json.loads(Response.text)
+	def __GetChapterSlides(self, ChapterID: int | str, Number: float | int | str, Volume: int | str, BranchID: int | str = str(), FromJavaScript: bool = True) -> list[dict]:
 		# Список слайдов.
 		Slides = list()
 		
-		# Для каждого изображения.
-		for ImageIndex in range(0, len(Data["images"])):
-			# Буфер слайда.
-			Bufer = {
-				"index": ImageIndex + 1,
-				"link": Data["downloadServer"] + "/manga/" + self.__Title["slug"] + f"/chapters/{ChapterID}/" + Data["images"][ImageIndex],
-				"width": None,
-				"height": None
+		# Если используется метод получения слайдов со страницы загрузки.
+		if FromJavaScript == False and ChapterID != None:
+			# Запрос данных главы.
+			Response = self.__Requestor.get(f"https://{self.__Domain}/download/{ChapterID}")
+			# Конвертирование ответа в словарь.
+			Data = json.loads(Response.text)
+		
+			# Для каждого изображения.
+			for ImageIndex in range(0, len(Data["images"])):
+				# Буфер слайда.
+				Bufer = {
+					"index": ImageIndex + 1,
+					"link": Data["downloadServer"] + "/manga/" + self.__Title["slug"] + f"/chapters/{ChapterID}/" + Data["images"][ImageIndex],
+					"width": None,
+					"height": None
+				}
+				# Экранирование пробелов URL.
+				Bufer["link"] = Bufer["link"].replace(" ", "%20")
+				# Запись информации о слайде.
+				Slides.append(Bufer)
+				
+		else:
+			# Параметры запроса.
+			RequestParams = {
+				"ui": self.__Settings["user-id"],
+				"bid": str(BranchID)
 			}
-			# Запись информации о слайде.
-			Slides.append(Bufer)
+			# Если не задана ветвь, удалить параметр запроса.
+			if BranchID == "" or str(BranchID) == "0": del RequestParams["bid"]
+			# Запрос страницы главы.
+			Response = self.__Requestor.get(f"https://{self.__Domain}/{self.__Slug}/v{Volume}/c{Number}", Params = RequestParams)
+			# Парсинг страницы главы.
+			Soup = BeautifulSoup(Response.text, "html.parser")
+			# Поиск JavaScript, определяющего имена файлов изображений.
+			ImagesScript = Soup.find("script", {"id": "pg"}).get_text()
+			# Преобразование скрипта в словарь.
+			Data = json.loads(ImagesScript.replace("window.__pg", "").strip("= ;\n"))
+			# Текущий сервер.
+			Server = self.__GetServersList(Soup)[self.__Server]
+			
+			# Для каждого изображения.
+			for ImageIndex in range(0, len(Data)):
+				# Буфер слайда.
+				Bufer = {
+					"index": ImageIndex + 1,
+					"link": Server + "/manga/" + self.__Title["slug"] + f"/chapters/{ChapterID}/" + Data[ImageIndex]["u"],
+					"width": None,
+					"height": None
+				}
+				# Экранирование пробелов URL.
+				Bufer["link"] = Bufer["link"].replace(" ", "%20")
+				# Запись информации о слайде.
+				Slides.append(Bufer)
 			
 		return Slides
 	
@@ -297,7 +341,9 @@ class TitleParser:
 		# Блок описания.
 		DescriptionBlock = Page.find("div", {"class": "media-description__text"})
 		# Описание.
-		Description = RemoveRecurringSubstrings(DescriptionBlock.get_text().strip().replace("\r", ""), "\n\n")
+		Description = None
+		# Если описание есть, записать его.
+		if DescriptionBlock != None: Description = RemoveRecurringSubstrings(DescriptionBlock.get_text().strip().replace("\r", ""), "\n\n")
 
 		return Description
 	
@@ -341,6 +387,25 @@ class TitleParser:
 				Year = int(Link.get_text().replace("Год релиза", "").strip())
 	
 		return Year
+	
+	# Возвращает словарь серверов изображений.
+	def __GetServersList(self, Page: str) -> dict | None:
+		# Поиск блоков скриптов.
+		Scripts = Page.find_all("script")
+		# Словарь серверов.
+		Data = None 
+		
+		# Для каждого блока скрипта.
+		for Script in Scripts:
+			
+			# Если найден нужный блок.
+			if "window.__info" in str(Script):
+				# Получение строки данных окна.
+				WindowInfo = Script.get_text().split("window.__info")[-1].split("window._SITE_COLOR_")[0].strip("[= ;\n]")
+				# Преобразование данных окна в словарь.
+				Data = json.loads(WindowInfo)["servers"]
+		
+		return Data
 	
 	# Возвращает статус.
 	def __GetStatus(self, Page: str, Data: dict) -> str:
@@ -393,34 +458,34 @@ class TitleParser:
 	# Получает тайтл.
 	def __GetTitle(self):
 		# Запрос страницы описания тайтла.
-		Response = self.__Requestor.get(f"https://mangalib.me/{self.__Slug}?section=info")
+		Response = self.__Requestor.get(f"https://{self.__Domain}/{self.__Slug}?section=info")
 		
 		# Если запрос успешен.
 		if Response.status_code == 200:
 			# Парсинг страницы описания.
 			Page = BeautifulSoup(Response.text, "html.parser")
 			# Получение данных тайтла.
-			Data = self.__GetTitleData(Page)
+			self.__Data = self.__GetTitleData(Page)
 			# Заполнение описания тайтла.
 			self.__Title["site"] = "mangalib.me"
-			self.__Title["id"] = Data["manga"]["id"]
+			self.__Title["id"] = self.__Data["manga"]["id"]
 			self.__Title["slug"] = self.__Slug
 			self.__Title["covers"] = list()
-			self.__Title["ru-name"] = Data["manga"]["rusName"]
-			self.__Title["en-name"] = Data["manga"]["engName"]
-			self.__Title["another-names"] = Data["manga"]["altNames"]
+			self.__Title["ru-name"] = self.__Data["manga"]["rusName"]
+			self.__Title["en-name"] = self.__Data["manga"]["engName"]
+			self.__Title["another-names"] = self.__Data["manga"]["altNames"]
 			self.__Title["author"] = self.__GetAuthor(Page)
 			self.__Title["publication-year"] = self.__GetPublicationYear(Page)
 			self.__Title["age-rating"] = self.__GetAgeRating(Page)
 			self.__Title["description"] = self.__GetDescription(Page)
 			self.__Title["type"] = self.__GetType(Page)
-			self.__Title["status"] = self.__GetStatus(Page, Data)
+			self.__Title["status"] = self.__GetStatus(Page, self.__Data)
 			self.__Title["is-licensed"] = self.__CheckLicense(Page)
 			self.__Title["series"]
 			self.__Title["genres"] = self.__GetGenres(Page)
 			self.__Title["tags"] = self.__GetTags(Page)
-			self.__Title["branches"] = self.__BuildBranches(Data)
-			self.__Title["chapters"] = self.__BuildChapters(Data)
+			self.__Title["branches"] = self.__BuildBranches(self.__Data)
+			self.__Title["chapters"] = self.__BuildChapters(self.__Data)
 			
 			# Получение данных об обложке.
 			self.__Title["covers"].append(self.__GetCover(Page))
@@ -523,13 +588,24 @@ class TitleParser:
 							MergedChaptersCount += 1
 						
 				# Запись в лог сообщения: завершение слияния.
-				logging.info("Title: \"" + self.__Slug + "\". Merged chapters: " + str(MergedChaptersCount) + ".")			
+				logging.info("Title: \"" + self.__Slug + "\". Merged chapters: " + str(MergedChaptersCount) + ".")
 	
 	# Конструктор.
-	def __init__(self, Settings: dict, Requestor: WebRequestor, Slug: str, ForceMode: bool = False, Message: str = "", Amending: bool = True):
+	def __init__(self,
+			  Settings: dict,
+			  Requestor: WebRequestor,
+			  Slug: str,
+			  Domain: str = "mangalib.me",
+			  Server: str = "compress",
+			  ForceMode: bool = False,
+			  Message: str = "",
+			  Amending: bool = True
+		):
 		
 		#---> Генерация динамических свойств.
 		#==========================================================================================#
+		# Сообщение из внешнего обработчика.
+		self.__Message = Message + "Current title: " + Slug + "\n"
 		# Состояние: включена ли перезапись файлов.
 		self.__ForceMode = ForceMode
 		# Глобальные настройки.
@@ -538,6 +614,8 @@ class TitleParser:
 		self.__Requestor = Requestor
 		# Состояние: доступен ли тайтл.
 		self.__IsActive = True
+		# Домен.
+		self.__Domain = Domain
 		# Описательная структура тайтла.
 		self.__Title = {
 			"format": "dmp-v1",
@@ -561,12 +639,12 @@ class TitleParser:
 			"branches": list(),
 			"chapters": dict()
 		}
+		# Данные тайтла.
+		self.__Data = None
 		# Алиас тайтла.
 		self.__Slug = Slug
-		# Сообщение из внешнего обработчика.
-		self.__Message = Message + "Current title: " + self.__Slug + "\n"
-		# Домен.
-		self.__Domain = "mangalib.me"
+		# Выбранный сервер.
+		self.__Server = Server
 		
 		# Очистка консоли.
 		Cls()
@@ -594,6 +672,10 @@ class TitleParser:
 			
 			# Если включено дополнение глав, то дополнить.
 			if Amending == True: self.__Amend()
+			
+		else:
+			# Запись в лог ошибки: тайтл не найден.
+			logging.error("Title: \"" + self.__Slug + "\". Not found. Skipped.")
 		
 	# Загружает обложку.
 	def downloadCover(self):
@@ -683,7 +765,12 @@ class TitleParser:
 					# Переключение состояния.
 					IsRepaired = True
 					# Получение списка слайдов главы.
-					Slides = self.__GetChapterSlides(self.__Title["chapters"][BranchID][ChapterIndex]["id"])
+					Slides = self.__GetChapterSlides(
+						self.__Title["chapters"][BranchID][ChapterIndex]["id"],
+						self.__Title["chapters"][BranchID][ChapterIndex]["number"],
+						self.__Title["chapters"][BranchID][ChapterIndex]["volume"],
+						BranchID[len(str(self.__Title["id"])):]
+					)
 					# Запись в лог сообщения: глава дополнена.
 					logging.info("Title: \"" + self.__Slug + "\". Chapter " + str(self.__Title["chapters"][BranchID][ChapterIndex]["id"]) + " repaired.")
 					# Запись информации о слайде.
@@ -714,5 +801,5 @@ class TitleParser:
 			# Если существует JSON с альтернативным названием ID.
 			if os.path.exists(self.__Settings["titles-directory"] + str(self.__Title["id"]) + ".json") == True: os.remove(self.__Settings["titles-directory"] + str(self.__Title["id"]) + ".json")
 			
-		# Сохранение файла.
-		WriteJSON(self.__Settings["titles-directory"] + UsedName + ".json", self.__Title)
+		# Если тайтл активен, записать JSON.
+		if self.__IsActive: WriteJSON(self.__Settings["titles-directory"] + UsedName + ".json", self.__Title)

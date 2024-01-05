@@ -2,6 +2,7 @@
 	"email": "",
 	"password": "",
 	"use-id-instead-slug": false,
+	"user-id": 0,
 	"check-updates-period": 2,
 	"titles-directory": "",
 	"covers-directory": "",

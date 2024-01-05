@@ -16,7 +16,7 @@
 ```json
 {
 	"format": "dmp-v1",
-	"site": "remanga.org",
+	"site": "mangalib.me",
 	"id": 123,
 	"slug": "123-manga-name",
 	"covers": [
@@ -25,18 +25,6 @@
 			"filename": "high_cover.jpg",
 			"width": 480,
 			"height": 640
-		},
-		{
-			"link": "https://link_to_cover/mid_cover.jpg",
-			"filename": "mid_cover.jpg",
-			"width": 360,
-			"height": 480
-		},
-		{
-			"link": "https://link_to_cover/low_cover.jpg",
-			"filename": "low_cover.jpg",
-			"width": 240,
-			"height": 360
 		}
 	],
 	"ru-name": "Название манги",
@@ -45,14 +33,16 @@
 		"漫画名",
 		"Mangamei"
 	],
-	"author": null,
+	"author": "Имя автора",
 	"publication-year": 2023,
 	"age-rating": 0,
 	"description": "Первый абзац описания.\nВторой абзац описания.",
 	"type": "MANGA",
 	"status": "ONGOING",
 	"is-licensed": false,
-	"series": [],
+	"series": [
+		"название серии"
+	],
 	"genres": [
 		"название жанра"
 	],

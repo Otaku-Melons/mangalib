@@ -1,7 +1,7 @@
 from dublib.Methods import Cls, CheckPythonMinimalVersion, MakeRootDirectories, ReadJSON, Shutdown
 from dublib.Terminalyzer import ArgumentType, Command, Terminalyzer
 from Source.Functions import Authorizate, SecondsToTimeString
-from dublib.WebRequestor import WebRequestor, RequestsConfig
+from dublib.WebRequestor import HttpxConfig, WebRequestor, RequestsConfig
 from Source.TitleParser import TitleParser
 
 import datetime
@@ -89,6 +89,7 @@ CommandsList.append(COM_getcov)
 COM_parse = Command("parse")
 COM_parse.addArgument(ArgumentType.All, Important = True, LayoutIndex = 1)
 COM_parse.addFlagPosition(["collection"], Important = True, LayoutIndex = 1)
+COM_parse.addFlagPosition(["h", "y"])
 COM_parse.addFlagPosition(["f"])
 COM_parse.addFlagPosition(["s"])
 COM_parse.addKeyPosition(["from"], ArgumentType.All)
@@ -125,9 +126,11 @@ InFuncMessage_Shutdown = ""
 IsForceModeActivated = False
 # Сообщение для внутренних функций: режим перезаписи.
 InFuncMessage_ForceMode = ""
+# Выбранный домен.
+Domain = "mangalib.me"
 
 # Обработка флага: режим перезаписи.
-if "f" in CommandDataStruct.Flags and CommandDataStruct.Name not in []:
+if "f" in CommandDataStruct.Flags and CommandDataStruct.Name not in ["repair"]:
 	# Включение режима перезаписи.
 	IsForceModeActivated = True
 	# Запись в лог сообщения: включён режим перезаписи.
@@ -140,6 +143,18 @@ else:
 	logging.info("Force mode: OFF.")
 	# Установка сообщения для внутренних функций.
 	InFuncMessage_ForceMode = "Force mode: OFF\n"
+	
+# Обработка флага: парсинг хентая.
+if "h" in CommandDataStruct.Flags:
+	# Изменение домена.
+	Domain = "hentailib.me"
+	
+elif "y" in CommandDataStruct.Flags:
+	# Изменение домена.
+	Domain = "hentailib.me"
+	
+# Запись в лог сообщения: выбранный домен.
+logging.info(f"Domain: \"{Domain}\".")
 
 # Обработка флага: выключение ПК после завершения работы скрипта.
 if "s" in CommandDataStruct.Flags:
@@ -156,12 +171,10 @@ if "s" in CommandDataStruct.Flags:
 
 # Экземпляр навигатора.
 Requestor = WebRequestor(Logging = True)
-# Настройка конфигурации.
-Config = RequestsConfig()
 # Установка конфигурации.
-Requestor.initialize()
+Requestor.initialize(HttpxConfig() if Domain != "mangalib.me" else RequestsConfig())
 # Авторизация.
-Authorizate(Settings, Requestor)
+Authorizate(Settings, Requestor, Domain)
 
 #==========================================================================================#
 # >>>>> ОБРАБОТКА КОММАНД <<<<< #
@@ -172,7 +185,7 @@ if "getcov" == CommandDataStruct.Name:
 	# Запись в лог сообщения: заголовок парсинга.
 	logging.info("====== Parsing ======")
 	# Парсинг тайтла (без глав).
-	LocalTitle = TitleParser(Settings, Requestor, CommandDataStruct.Arguments[0], ForceMode = IsForceModeActivated, Message = InFuncMessage_Shutdown + InFuncMessage_ForceMode, Amending = False)
+	LocalTitle = TitleParser(Settings, Requestor, CommandDataStruct.Arguments[0], Domain, ForceMode = IsForceModeActivated, Message = InFuncMessage_Shutdown + InFuncMessage_ForceMode, Amending = False)
 	# Сохранение локальных файлов тайтла.
 	LocalTitle.downloadCover()
 
@@ -237,9 +250,9 @@ if "parse" == CommandDataStruct.Name:
 		# Генерация сообщения.
 		ExternalMessage = InFuncMessage_Shutdown + InFuncMessage_ForceMode + InFuncMessage_Progress if len(TitlesList) > 1 else InFuncMessage_Shutdown + InFuncMessage_ForceMode
 		# Парсинг тайтла.
-		LocalTitle = TitleParser(Settings, Requestor, TitlesList[Index], ForceMode = IsForceModeActivated, Message = ExternalMessage)
+		LocalTitle = TitleParser(Settings, Requestor, TitlesList[Index], Domain, ForceMode = IsForceModeActivated, Message = ExternalMessage)
 		# Загружает обложку тайтла.
-		LocalTitle.downloadCover()
+		#LocalTitle.downloadCover()
 		# Сохранение локальных файлов тайтла.
 		LocalTitle.save()
 		
@@ -258,7 +271,7 @@ if "repair" == CommandDataStruct.Name:
 	# Алиас тайтла.
 	TitleSlug = TitleContent["slug"]
 	# Парсинг тайтла.
-	LocalTitle = TitleParser(Settings, Requestor, TitleSlug, ForceMode = False, Message = ExternalMessage, Amending = False)
+	LocalTitle = TitleParser(Settings, Requestor, TitleSlug, Domain, ForceMode = False, Message = ExternalMessage, Amending = False)
 	# Восстановление главы.
 	LocalTitle.repairChapter(CommandDataStruct.Values["chapter"])
 	# Сохранение локальных файлов тайтла.

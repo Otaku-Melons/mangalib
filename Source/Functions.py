@@ -4,18 +4,20 @@ from bs4 import BeautifulSoup
 import logging
 
 # Выполняет авторизацию.
-def Authorizate(Settings: dict, Requestor: WebRequestor):
+def Authorizate(Settings: dict, Requestor: WebRequestor, Domain: str):
 	
 	# Если указаны логин и пароль.
 	if type(Settings["email"]) == str and len(Settings["email"]) > 0 and type(Settings["password"]) == str and len(Settings["password"]) > 0:
 		
 		try:
 			# Запрос страницы авторизации.
-			Response = Requestor.get("https://lib.social/login")
+			Response = Requestor.get(f"https://{Domain}/")
+			# Запрос страницы авторизации.
+			Response = Requestor.get(f"https://lib.social/login?from=https%3A%2F%2F{Domain}%2F")
 			# Получение токена страницы.
 			Token = BeautifulSoup(Response.text, "html.parser").find("meta", {"name": "_token"})["content"]
 			# Данные авторизации.
-			Data = f"_token={Token}&email=" + Settings["email"] + "&password=" + Settings["password"] + "&remember=on"
+			Data = f"_token={Token}&email=" + Settings["email"] + "&password=" + Settings["password"] + f"&remember=on&from=https%3A%2F%2F{Domain}%2F"
 			# Заголовки запроса.
 			Headers = {
 				"Origin": "https://lib.social",
@@ -23,7 +25,7 @@ def Authorizate(Settings: dict, Requestor: WebRequestor):
 				"Content-Type": "application/x-www-form-urlencoded"
 			}
 			# Запрос авторизации.
-			Response = Requestor.post("https://lib.social/login?from=https%3A%2F%2Fmangalib.me%2Fadabana%3Fsection%3Dinfo", Data = Data, Headers = Headers, TriesCount = 1)
+			Response = Requestor.post(f"https://lib.social/login?from=https%3A%2F%2F{Domain}%2F", Data = Data, Headers = Headers, TriesCount = 1)
 			
 		except Exception as ExceptionData:
 			# Запись в лог ошибки: не удалось выполнить авторизацию.
