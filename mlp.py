@@ -1,7 +1,7 @@
 from dublib.Methods import Cls, CheckPythonMinimalVersion, MakeRootDirectories, ReadJSON, Shutdown
+from dublib.WebRequestor import HttpxConfig, WebRequestor, RequestsConfig, Protocols
 from dublib.Terminalyzer import ArgumentType, Command, Terminalyzer
 from Source.Functions import Authorizate, SecondsToTimeString
-from dublib.WebRequestor import HttpxConfig, WebRequestor, RequestsConfig
 from Source.TitleParser import TitleParser
 from Source.Updater import Updater
 
@@ -91,7 +91,7 @@ CommandsList.append(COM_getcov)
 # Создание команды: parse.
 COM_parse = Command("parse")
 COM_parse.addArgument(ArgumentType.All, Important = True, LayoutIndex = 1)
-COM_parse.addFlagPosition(["collection"], Important = True, LayoutIndex = 1)
+COM_parse.addFlagPosition(["collection", "local"], Important = True, LayoutIndex = 1)
 COM_parse.addFlagPosition(["h", "y"])
 COM_parse.addFlagPosition(["f"])
 COM_parse.addFlagPosition(["s"])
@@ -186,6 +186,14 @@ if "s" in CommandDataStruct.Flags:
 
 # Экземпляр навигатора.
 Requestor = WebRequestor(Logging = True)
+# Установка прокси.
+if Settings["proxy"]["enable"] == True: Requestor.addProxy(
+	Protocols.HTTPS,
+	Host = Settings["proxy"]["host"],
+	Port = Settings["proxy"]["port"],
+	Login = Settings["proxy"]["login"],
+	Password = Settings["proxy"]["password"]
+)
 # Установка конфигурации.
 Requestor.initialize(HttpxConfig() if Domain != "mangalib.me" else RequestsConfig())
 # Авторизация.
@@ -237,6 +245,25 @@ if "parse" == CommandDataStruct.Name:
 			logging.critical("Unable to find collection file.")
 			# Выброс исключения.
 			raise FileNotFoundError("Collection.txt")
+		
+	# Если активирован флаг обновления локальных файлов.
+	elif "local" in CommandDataStruct.Flags:
+		# Вывод в консоль: идёт поиск тайтлов.
+		print("Scanning titles...")
+		# Получение списка файлов в директории.
+		TitlesSlugs = os.listdir(Settings["titles-directory"])
+		# Фильтрация только файлов формата JSON.
+		TitlesSlugs = list(filter(lambda x: x.endswith(".json"), TitlesSlugs))
+			
+		# Чтение всех алиасов из локальных файлов.
+		for File in TitlesSlugs:
+			# JSON файл тайтла.
+			LocalTitle = ReadJSON(Settings["titles-directory"] + File)
+			# Помещение алиаса в список.
+			TitlesList.append(str(LocalTitle["slug"]) if "slug" in LocalTitle.keys() else str(LocalTitle["dir"]))
+
+		# Запись в лог сообщения: количество доступных для парсинга тайтлов.
+		logging.info("Local titles to parsing: " + str(len(TitlesList)) + ".")
 
 	else:
 		# Добавление аргумента в очередь парсинга.
@@ -266,10 +293,12 @@ if "parse" == CommandDataStruct.Name:
 		ExternalMessage = InFuncMessage_Shutdown + InFuncMessage_ForceMode + InFuncMessage_Domain + InFuncMessage_Progress if len(TitlesList) > 1 else InFuncMessage_Shutdown + InFuncMessage_ForceMode + InFuncMessage_Domain
 		# Парсинг тайтла.
 		LocalTitle = TitleParser(Settings, Requestor, TitlesList[Index], Domain, ForceMode = IsForceModeActivated, Message = ExternalMessage)
-		# Загружает обложку тайтла.
+		# Загрузка обложки тайтла.
 		LocalTitle.downloadCover()
 		# Сохранение локальных файлов тайтла.
 		LocalTitle.save()
+		# Выжидание интервала.
+		time.sleep(Settings["delay"])
 		
 # Обработка команды: repair.
 if "repair" == CommandDataStruct.Name:
@@ -341,7 +370,9 @@ if "update" == CommandDataStruct.Name:
 		else:
 			# Парсинг тайтла.
 			LocalTitle = TitleParser(Settings, Requestor, TitlesList[Index], Domain, ForceMode = IsForceModeActivated, Message = ExternalMessage)
-				
+			# Загрузка обложки тайтла.
+			LocalTitle.downloadCover()
+			
 		# Сохранение локальных файлов тайтла.
 		LocalTitle.save()
 		# Выжидание указанного интервала, если не все тайтлы обновлены.

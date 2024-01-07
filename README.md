@@ -7,7 +7,7 @@
 3. В среду исполнения установить следующие пакеты: [BeautifulSoup4](https://launchpad.net/beautifulsoup), [dublib](https://github.com/DUB1401/dublib).
 ```
 pip install BeautifulSoup4
-pip install dublib
+pip install dublib==0.2.0
 ```
 Либо установить сразу все пакеты при помощи следующей команды, выполненной из директории скрипта.
 ```
@@ -123,6 +123,17 @@ ___
 "covers-directory": ""
 ```
 Указывает, куда сохранять обложки тайтлов. При пустом значении будет создана папка _Covers_ в исполняемой директории скрипта. Рекомендуется оформлять в соответствии с принципами путей в Linux, описанными [здесь](http://cs.mipt.ru/advanced_python/lessons/lab02.html#cd).
+___
+```JSON
+"proxy": {
+	"enable": false,
+	"host": "",
+	"port": "",
+	"login": null,
+	"password": null
+}
+```
+Указывает HTTPS-прокси для выполнения запросов. Помогает обойти региональные ограничения доступа к сайту.
 ___
 ```JSON
 "delay": 1

@@ -6,5 +6,12 @@
 	"check-updates-period": 24,
 	"titles-directory": "",
 	"covers-directory": "",
+	"proxy": {
+		"enable": false,
+		"host": "",
+		"port": "",
+		"login": null,
+		"password": null
+	},
 	"delay": 1
 }

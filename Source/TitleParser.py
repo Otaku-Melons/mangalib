@@ -182,9 +182,9 @@ class TitleParser:
 			# Буфер главы.
 			Bufer = {
 				"id": Chapter["chapter_id"],
+				"volume": Chapter["chapter_volume"],
 				"number": float(Chapter["chapter_number"]) if "." in Chapter["chapter_number"] else int(Chapter["chapter_number"]),
 				"name": Chapter["chapter_name"],
-				"volume": Chapter["chapter_volume"],
 				"is-paid": True if (Chapter["price"]) > 0 else False,
 				"translator": None,
 				"slides": list()
@@ -343,7 +343,7 @@ class TitleParser:
 		# Описание.
 		Description = None
 		# Если описание есть, записать его.
-		if DescriptionBlock != None: Description = RemoveRecurringSubstrings(DescriptionBlock.get_text().strip().replace("\r", ""), "\n\n")
+		if DescriptionBlock != None: Description = RemoveRecurringSubstrings(DescriptionBlock.get_text().strip().replace("\r", ""), "\n")
 
 		return Description
 	
@@ -701,73 +701,76 @@ class TitleParser:
 		
 	# Загружает обложку.
 	def downloadCover(self):
-		# Используемое имя тайтла.
-		UsedName = None
-		# Очистка консоли.
-		Cls()
 		
-		# Если вместо алиаса используется ID.
-		if self.__Settings["use-id-instead-slug"] == True:
-			# Установка имени тайтла.
-			UsedName = str(self.__Title["id"])
+		# Если тайтл активен.
+		if self.__IsActive == True:
+			# Используемое имя тайтла.
+			UsedName = None
+			# Очистка консоли.
+			Cls()
+		
+			# Если вместо алиаса используется ID.
+			if self.__Settings["use-id-instead-slug"] == True:
+				# Установка имени тайтла.
+				UsedName = str(self.__Title["id"])
 			
-			# Если существует папка для обложек с альтернативным названием алиасом.
-			if os.path.exists(self.__Settings["covers-directory"] + self.__Slug) == True:
-				# Удаление старой обложки.
-				RemoveFolderContent(self.__Settings["covers-directory"] + self.__Slug)
-				# Удаление папки с алиасом в названии.
-				os.rmdir(self.__Settings["covers-directory"] + self.__Slug)
+				# Если существует папка для обложек с альтернативным названием алиасом.
+				if os.path.exists(self.__Settings["covers-directory"] + self.__Slug) == True:
+					# Удаление старой обложки.
+					RemoveFolderContent(self.__Settings["covers-directory"] + self.__Slug)
+					# Удаление папки с алиасом в названии.
+					os.rmdir(self.__Settings["covers-directory"] + self.__Slug)
 				
-		else:
-			# Установка имени тайтла.
-			UsedName = str(self.__Slug)
-			
-			# Если существует папка для обложек с альтернативным названием ID.
-			if os.path.exists(self.__Settings["covers-directory"] + str(self.__Title["id"])) == True:
-				# Удаление старой обложки.
-				RemoveFolderContent(self.__Settings["covers-directory"] + str(self.__Title["id"]))
-				# Удаление папки с алиасом в названии.
-				os.rmdir(self.__Settings["covers-directory"] + str(self.__Title["id"]))
-				
-		# Если включен режим перезаписи.
-		if self.__ForceMode == True:
-			
-			try:
-				# Удаление следов старой обложки.
-				RemoveFolderContent(self.__Settings["covers-directory"] + UsedName)
-				os.rmdir(self.__Settings["covers-directory"] + UsedName)
-				
-			except:
-				pass
-			
-		# Если обложка не загружена.
-		if os.path.exists(self.__Settings["covers-directory"] + UsedName + "/" + self.__Title["covers"][0]["filename"]) == False:
-			# Если папка не существует, создать папку для обложки.
-			if os.path.exists(self.__Settings["covers-directory"] + UsedName) == False: os.mkdir(self.__Settings["covers-directory"] + UsedName)
-			# Вывод в консоль: загрузка обложки.
-			print(self.__Message + "\nDownloading cover: \"" + self.__Title["covers"][0]["link"] + "\"... ", end = "")
-			# Загрузка изображения.
-			Response = self.__Requestor.get(self.__Title["covers"][0]["link"])
-			
-			# Если запрос успешен.
-			if Response.status_code == 200:
-				
-				# Открытие файла для записи.
-				with open(self.__Settings["covers-directory"] + UsedName + "/" + self.__Title["covers"][0]["filename"], "wb") as FileWriter:
-					# Запись файла обложки.
-					FileWriter.write(Response.content)
-					# Вывод в консоль: загрузка завершена.
-					print("Done.")
-					# Запись в лог сообщения: обложка загружена.
-					logging.info("Title: \"" + self.__Slug + "\". Cover downloaded.")
-					
 			else:
-				# Вывод в консоль: загрузка прервана.
-				print("Error!")
+				# Установка имени тайтла.
+				UsedName = str(self.__Slug)
+			
+				# Если существует папка для обложек с альтернативным названием ID.
+				if os.path.exists(self.__Settings["covers-directory"] + str(self.__Title["id"])) == True:
+					# Удаление старой обложки.
+					RemoveFolderContent(self.__Settings["covers-directory"] + str(self.__Title["id"]))
+					# Удаление папки с алиасом в названии.
+					os.rmdir(self.__Settings["covers-directory"] + str(self.__Title["id"]))
 				
-		else:
-			# Запись в лог сообщения: обложка уже загружена.
-			logging.info("Title: \"" + self.__Slug + "\". Cover already exists. Skipped.")
+			# Если включен режим перезаписи.
+			if self.__ForceMode == True:
+			
+				try:
+					# Удаление следов старой обложки.
+					RemoveFolderContent(self.__Settings["covers-directory"] + UsedName)
+					os.rmdir(self.__Settings["covers-directory"] + UsedName)
+				
+				except:
+					pass
+			
+			# Если обложка не загружена.
+			if os.path.exists(self.__Settings["covers-directory"] + UsedName + "/" + self.__Title["covers"][0]["filename"]) == False:
+				# Если папка не существует, создать папку для обложки.
+				if os.path.exists(self.__Settings["covers-directory"] + UsedName) == False: os.mkdir(self.__Settings["covers-directory"] + UsedName)
+				# Вывод в консоль: загрузка обложки.
+				print(self.__Message + "\nDownloading cover: \"" + self.__Title["covers"][0]["link"] + "\"... ", end = "")
+				# Загрузка изображения.
+				Response = self.__Requestor.get(self.__Title["covers"][0]["link"])
+			
+				# Если запрос успешен.
+				if Response.status_code == 200:
+				
+					# Открытие файла для записи.
+					with open(self.__Settings["covers-directory"] + UsedName + "/" + self.__Title["covers"][0]["filename"], "wb") as FileWriter:
+						# Запись файла обложки.
+						FileWriter.write(Response.content)
+						# Вывод в консоль: загрузка завершена.
+						print("Done.")
+						# Запись в лог сообщения: обложка загружена.
+						logging.info("Title: \"" + self.__Slug + "\". Cover downloaded.")
+					
+				else:
+					# Вывод в консоль: загрузка прервана.
+					print("Error!")
+				
+			else:
+				# Запись в лог сообщения: обложка уже загружена.
+				logging.info("Title: \"" + self.__Slug + "\". Cover already exists. Skipped.")
 			
 	# Пересобирает слайды главы.
 	def repairChapter(self, ChapterID: int | str):
