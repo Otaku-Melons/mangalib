@@ -102,6 +102,7 @@ CommandsList.append(COM_parse)
 COM_repair = Command("repair")
 COM_repair.addArgument(ArgumentType.All, Important = True)
 COM_repair.addKeyPosition(["chapter"], ArgumentType.Number, Important = True)
+COM_repair.addFlagPosition(["h", "y"])
 COM_repair.addFlagPosition(["s"])
 CommandsList.append(COM_repair)
 

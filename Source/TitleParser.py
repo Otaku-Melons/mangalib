@@ -111,7 +111,7 @@ class TitleParser:
 					# Запись в лог сообщения: глава дополнена.
 					logging.info("Title: \"" + self.__Slug + "\". Chapter " + str(self.__Title["chapters"][BranchID][ChapterIndex]["id"]) + " amended.")
 					# Запись информации о слайде.
-					self.__Title["chapters"][BranchID][ChapterIndex]["slides"].append(Slides)
+					self.__Title["chapters"][BranchID][ChapterIndex]["slides"] = Slides
 					# Выжидание интервала.
 					sleep(self.__Settings["delay"])
 
