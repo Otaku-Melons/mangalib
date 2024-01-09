@@ -101,7 +101,7 @@ class TitleParser:
 					
 					# Получение списка слайдов главы.
 					Slides = self.__GetChapterSlides(
-						self.__Title["chapters"][BranchID][ChapterIndex]["id"],
+						self.__Title["chapters"][BranchID][ChapterIndex]["CHAPTER_SLUG"],
 						self.__Title["chapters"][BranchID][ChapterIndex]["number"],
 						self.__Title["chapters"][BranchID][ChapterIndex]["volume"],
 						BranchID[len(str(self.__Title["id"])):]
@@ -184,9 +184,10 @@ class TitleParser:
 				"id": Chapter["chapter_id"],
 				"volume": Chapter["chapter_volume"],
 				"number": float(Chapter["chapter_number"]) if "." in Chapter["chapter_number"] else int(Chapter["chapter_number"]),
-				"name": Chapter["chapter_name"],
+				"name": Chapter["chapter_name"] if Chapter["chapter_name"] != "" else None,
 				"is-paid": True if (Chapter["price"]) > 0 else False,
 				"translator": None,
+				"CHAPTER_SLUG": Chapter["chapter_slug"],
 				"slides": list()
 			}
 			
@@ -255,14 +256,14 @@ class TitleParser:
 		return Author
 	
 	# Возвращает список слайдов главы.
-	def __GetChapterSlides(self, ChapterID: int | str, Number: float | int | str, Volume: int | str, BranchID: int | str = str(), FromJavaScript: bool = True) -> list[dict]:
+	def __GetChapterSlides(self, ChapterSlug: str, Number: float | int | str, Volume: int | str, BranchID: int | str = str(), FromJavaScript: bool = True) -> list[dict]:
 		# Список слайдов.
 		Slides = list()
 		
 		# Если используется метод получения слайдов со страницы загрузки.
-		if FromJavaScript == False and ChapterID != None:
+		if FromJavaScript == False:
 			# Запрос данных главы.
-			Response = self.__Requestor.get(f"https://{self.__Domain}/download/{ChapterID}")
+			Response = self.__Requestor.get(f"https://{self.__Domain}/download/{ChapterSlug}")
 			# Конвертирование ответа в словарь.
 			Data = json.loads(Response.text)
 		
@@ -292,26 +293,35 @@ class TitleParser:
 			Response = self.__Requestor.get(f"https://{self.__Domain}/{self.__Slug}/v{Volume}/c{Number}", Params = RequestParams)
 			# Парсинг страницы главы.
 			Soup = BeautifulSoup(Response.text, "html.parser")
-			# Поиск JavaScript, определяющего имена файлов изображений.
-			ImagesScript = Soup.find("script", {"id": "pg"}).get_text()
-			# Преобразование скрипта в словарь.
-			Data = json.loads(ImagesScript.replace("window.__pg", "").strip("= ;\n"))
-			# Текущий сервер.
-			Server = self.__GetServersList(Soup)[self.__Server]
+			# Поиск блока JavaScript, определяющего имена файлов изображений.
+			ImagesScript = Soup.find("script", {"id": "pg"})
 			
-			# Для каждого изображения.
-			for ImageIndex in range(0, len(Data)):
-				# Буфер слайда.
-				Bufer = {
-					"index": ImageIndex + 1,
-					"link": Server + "/manga/" + self.__Title["slug"] + f"/chapters/{ChapterID}/" + Data[ImageIndex]["u"],
-					"width": None,
-					"height": None
-				}
-				# Экранирование пробелов URL.
-				Bufer["link"] = Bufer["link"].replace(" ", "%20")
-				# Запись информации о слайде.
-				Slides.append(Bufer)
+			# Если слайды присутствуют.
+			if ImagesScript != None:
+				# Получение кода JavaScript.
+				ImagesScript = ImagesScript.get_text()
+				# Преобразование скрипта в словарь.
+				Data = json.loads(ImagesScript.replace("window.__pg", "").strip("= ;\n"))
+				# Текущий сервер.
+				Server = self.__GetServersList(Soup)[self.__Server]
+			
+				# Для каждого изображения.
+				for ImageIndex in range(0, len(Data)):
+					# Буфер слайда.
+					Bufer = {
+						"index": ImageIndex + 1,
+						"link": Server + "/manga/" + self.__Title["slug"] + f"/chapters/{ChapterSlug}/" + Data[ImageIndex]["u"],
+						"width": None,
+						"height": None
+					}
+					# Экранирование пробелов URL.
+					Bufer["link"] = Bufer["link"].replace(" ", "%20")
+					# Запись информации о слайде.
+					Slides.append(Bufer)
+					
+			else:
+				# Запись в лог предупреждения: не удалось получить слайды.
+				logging.warning(f"Title: \"{self.__Slug}\". Chapter {ChapterID}. Unable to load slides.")
 			
 		return Slides
 	
@@ -483,7 +493,7 @@ class TitleParser:
 		Response = self.__Requestor.get(f"https://{self.__Domain}/{self.__Slug}?section=info")
 		
 		# Если запрос успешен.
-		if Response.status_code == 200:
+		if Response.status_code == 200 and "Данный тайтл недоступно на территории РФ." not in Response.text:
 			# Парсинг страницы описания.
 			Page = BeautifulSoup(Response.text, "html.parser")
 			# Получение данных тайтла.
@@ -514,6 +524,12 @@ class TitleParser:
 			# Запись в лог сообщения: получено описание тайтла.
 			logging.info("Title: \"" + self.__Title["slug"] + "\". Request title data... Done.")
 			
+		elif "Данный тайтл недоступно на территории РФ." in Response.text:
+			# Запись в лог ошибки: тайтл недоступен на территории РФ.
+			logging.error(f"Title: \"{self.__Slug}\". Not available on the territory of the Russian Federation.")
+			# Переключение статуса тайтла.
+			self.__IsActive = False
+			
 		else:
 			
 			# Если тайтл не найден.
@@ -521,6 +537,8 @@ class TitleParser:
 				# Запись в лог ошибки: тайтл не найден.
 				logging.error("Title: \"" + self.__Title["slug"] + "\". Not found. Skipped.")
 
+			# Запись в лог ошибки: нет доступа к тайтлу.
+			logging.error("Title: \"" + self.__Slug + "\". Not accessed. Skipped.")
 			# Переключение статуса тайтла.
 			self.__IsActive = False
 	
@@ -694,10 +712,6 @@ class TitleParser:
 			
 			# Если включено дополнение глав, то дополнить.
 			if Amending == True: self.__Amend()
-			
-		else:
-			# Запись в лог ошибки: нет доступа к тайтлу.
-			logging.error("Title: \"" + self.__Slug + "\". Not accessed. Skipped.")
 		
 	# Загружает обложку.
 	def downloadCover(self):
@@ -791,7 +805,7 @@ class TitleParser:
 					IsRepaired = True
 					# Получение списка слайдов главы.
 					Slides = self.__GetChapterSlides(
-						self.__Title["chapters"][BranchID][ChapterIndex]["id"],
+						self.__Title["chapters"][BranchID][ChapterIndex]["CHAPTER_SLUG"],
 						self.__Title["chapters"][BranchID][ChapterIndex]["number"],
 						self.__Title["chapters"][BranchID][ChapterIndex]["volume"],
 						BranchID[len(str(self.__Title["id"])):]
@@ -812,6 +826,14 @@ class TitleParser:
 	def save(self):
 		# Используемое имя тайтла.
 		UsedName = None
+		
+		# Для каждой ветви.
+		for BranchID in self.__Title["chapters"].keys():
+			
+			# Для каждый главы.
+			for ChapterIndex in range(0, len(self.__Title["chapters"][BranchID])):
+				# Если указан алиас главы, удалить его.
+				if "CHAPTER_SLUG" in self.__Title["chapters"][BranchID][ChapterIndex].keys(): del self.__Title["chapters"][BranchID][ChapterIndex]["CHAPTER_SLUG"]
 		
 		# Если вместо алиаса используется ID.
 		if self.__Settings["use-id-instead-slug"] == True:
