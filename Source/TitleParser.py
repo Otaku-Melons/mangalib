@@ -101,6 +101,7 @@ class TitleParser:
 					
 					# Получение списка слайдов главы.
 					Slides = self.__GetChapterSlides(
+						self.__Title["chapters"][BranchID][ChapterIndex]["id"],
 						self.__Title["chapters"][BranchID][ChapterIndex]["CHAPTER_SLUG"],
 						self.__Title["chapters"][BranchID][ChapterIndex]["number"],
 						self.__Title["chapters"][BranchID][ChapterIndex]["volume"],
@@ -256,7 +257,7 @@ class TitleParser:
 		return Author
 	
 	# Возвращает список слайдов главы.
-	def __GetChapterSlides(self, ChapterSlug: str, Number: float | int | str, Volume: int | str, BranchID: int | str = str(), FromJavaScript: bool = True) -> list[dict]:
+	def __GetChapterSlides(self, ChapterID: int| str, ChapterSlug: str, Number: float | int | str, Volume: int | str, BranchID: int | str = str(), FromJavaScript: bool = True) -> list[dict]:
 		# Список слайдов.
 		Slides = list()
 		
@@ -307,6 +308,8 @@ class TitleParser:
 			
 				# Для каждого изображения.
 				for ImageIndex in range(0, len(Data)):
+					# Если изображение является GIF, задать вторичный сервер.
+					if Data[ImageIndex]["u"].lower().endswith(".gif") == True: Server = self.__GetServersList(Soup)["secondary"]
 					# Буфер слайда.
 					Bufer = {
 						"index": ImageIndex + 1,
@@ -805,6 +808,7 @@ class TitleParser:
 					IsRepaired = True
 					# Получение списка слайдов главы.
 					Slides = self.__GetChapterSlides(
+						self.__Title["chapters"][BranchID][ChapterIndex]["id"],
 						self.__Title["chapters"][BranchID][ChapterIndex]["CHAPTER_SLUG"],
 						self.__Title["chapters"][BranchID][ChapterIndex]["number"],
 						self.__Title["chapters"][BranchID][ChapterIndex]["volume"],
