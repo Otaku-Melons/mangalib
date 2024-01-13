@@ -522,6 +522,8 @@ class TitleParser:
 			self.__Title["branches"] = self.__BuildBranches(self.__Data)
 			self.__Title["chapters"] = self.__BuildChapters(self.__Data)
 			
+			# Если у тайтла нет ни одного названия, записать главное название.
+			if self.__Title["ru-name"] == None and self.__Title["en-name"] == None and self.__Title["another-names"] == list(): self.__Title["another-names"].append(self.__Data["manga"]["name"])
 			# Получение данных об обложке.
 			self.__Title["covers"].append(self.__GetCover(Page))
 			# Запись в лог сообщения: получено описание тайтла.
