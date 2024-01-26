@@ -226,8 +226,10 @@ class TitleParser:
 	def __GetAgeRating(self, Page: str) -> int:
 		# Возрастное ограничение.
 		Rating = 0
+		# Поиск списка данных.
+		MediaList = Page.find("div", {"class": "media-info-list paper"})
 		# Поиск всех ссылок.
-		InfoLinks = Page.find_all("a")
+		InfoLinks = MediaList.find_all("a")
 		
 		# Для каждой ссылки.
 		for Link in InfoLinks:
@@ -291,7 +293,7 @@ class TitleParser:
 			# Если не задана ветвь, удалить параметр запроса.
 			if BranchID == "" or str(BranchID) == "0": del RequestParams["bid"]
 			# Запрос страницы главы.
-			Response = self.__Requestor.get(f"https://{self.__Domain}/{self.__Slug}/v{Volume}/c{Number}", Params = RequestParams)
+			Response = self.__Requestor.get(f"https://{self.__Domain}/{self.__Slug}/v{Volume}/c{Number}", params = RequestParams)
 			# Парсинг страницы главы.
 			Soup = BeautifulSoup(Response.text, "html.parser")
 			# Поиск блока JavaScript, определяющего имена файлов изображений.
@@ -386,8 +388,10 @@ class TitleParser:
 	
 	# Возвращает год публикации.
 	def __GetPublicationYear(self, Page: str) -> int | None:
+		# Поиск списка данных.
+		MediaList = Page.find("div", {"class": "media-info-list paper"})
 		# Поиск всех ссылок.
-		InfoLinks = Page.find_all("a")
+		InfoLinks = MediaList.find_all("a")
 		# Год публикации.
 		Year = None
 		
@@ -453,8 +457,10 @@ class TitleParser:
 			3: "ABANDONED",
 			4: "ABANDONED"
 		}
+		# Поиск списка данных.
+		MediaList = Page.find("div", {"class": "media-info-list paper"})
 		# Поиск всех ссылок.
-		InfoLinks = Page.find_all("a")
+		InfoLinks = MediaList.find_all("a")
 		# Интерпретация статуса.
 		if Data["manga"]["status"] in Statuses.keys(): Status = Statuses[Data["manga"]["status"]]
 		
@@ -571,8 +577,10 @@ class TitleParser:
 			"OEL-манга": "OEL",
 			"Маньхуа": "MANHUA"
 		}
+		# Поиск списка данных.
+		MediaList = Page.find("div", {"class": "media-info-list paper"})
 		# Поиск всех ссылок.
-		InfoLinks = Page.find_all("a")
+		InfoLinks = MediaList.find_all("a")
 		
 		# Для каждой ссылки.
 		for Link in InfoLinks:
