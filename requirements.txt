@@ -1,2 +1,2 @@
 BeautifulSoup4
-dublib==0.2.0
+dublib

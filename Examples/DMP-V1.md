@@ -18,7 +18,7 @@
 	"format": "dmp-v1",
 	"site": "mangalib.me",
 	"id": 123,
-	"slug": "123-manga-name",
+	"slug": "manga-slug",
 	"covers": [
 		{
 			"link": "https://link_to_cover/high_cover.jpg",

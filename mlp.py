@@ -1,6 +1,6 @@
 from dublib.Methods import Cls, CheckPythonMinimalVersion, MakeRootDirectories, ReadJSON, Shutdown
 from dublib.WebRequestor import HttpxConfig, WebRequestor, RequestsConfig, Protocols
-from dublib.Terminalyzer import ArgumentType, Command, Terminalyzer
+from dublib.Terminalyzer import ArgumentsTypes, Command, Terminalyzer
 from Source.Functions import Authorizate, SecondsToTimeString
 from Source.TitleParser import TitleParser
 from Source.Updater import Updater
@@ -83,42 +83,42 @@ CommandsList = list()
 
 # Создание команды: getcov.
 COM_getcov = Command("getcov")
-COM_getcov.addArgument(ArgumentType.All, Important = True)
-COM_getcov.addFlagPosition(["f"])
-COM_getcov.addFlagPosition(["s"])
+COM_getcov.add_argument(ArgumentsTypes.All, important = True)
+COM_getcov.add_flag_position(["f"])
+COM_getcov.add_flag_position(["s"])
 CommandsList.append(COM_getcov)
 
 # Создание команды: parse.
 COM_parse = Command("parse")
-COM_parse.addArgument(ArgumentType.All, Important = True, LayoutIndex = 1)
-COM_parse.addFlagPosition(["collection", "local"], Important = True, LayoutIndex = 1)
-COM_parse.addFlagPosition(["h", "y"])
-COM_parse.addFlagPosition(["f"])
-COM_parse.addFlagPosition(["s"])
-COM_parse.addKeyPosition(["from"], ArgumentType.All)
+COM_parse.add_argument(ArgumentsTypes.All, important = True, layout_index = 1)
+COM_parse.add_flag_position(["collection", "local"], important = True, layout_index = 1)
+COM_parse.add_flag_position(["h", "y"])
+COM_parse.add_flag_position(["f"])
+COM_parse.add_flag_position(["s"])
+COM_parse.add_key_position(["from"], ArgumentsTypes.All)
 CommandsList.append(COM_parse)
 
 # Создание команды: repair.
 COM_repair = Command("repair")
-COM_repair.addArgument(ArgumentType.All, Important = True)
-COM_repair.addKeyPosition(["chapter"], ArgumentType.Number, Important = True)
-COM_repair.addFlagPosition(["h", "y"])
-COM_repair.addFlagPosition(["s"])
+COM_repair.add_argument(ArgumentsTypes.All, important = True)
+COM_repair.add_key_position(["chapter"], ArgumentsTypes.Number, important = True)
+COM_repair.add_flag_position(["h", "y"])
+COM_repair.add_flag_position(["s"])
 CommandsList.append(COM_repair)
 
 # Создание команды: update.
 COM_update = Command("update")
-COM_update.addFlagPosition(["onlydesc"])
-COM_update.addFlagPosition(["h", "y"])
-COM_update.addFlagPosition(["f"])
-COM_update.addFlagPosition(["s"])
-COM_update.addKeyPosition(["from"], ArgumentType.All)
+COM_update.add_flag_position(["onlydesc"])
+COM_update.add_flag_position(["h", "y"])
+COM_update.add_flag_position(["f"])
+COM_update.add_flag_position(["s"])
+COM_update.add_key_position(["from"], ArgumentsTypes.All)
 CommandsList.append(COM_update)
 
 # Инициализация обработчика консольных аргументов.
 CAC = Terminalyzer()
 # Получение информации о проверке команд.
-CommandDataStruct = CAC.checkCommands(CommandsList)
+CommandDataStruct = CAC.check_commands(CommandsList)
 
 # Если не удалось определить команду.
 if CommandDataStruct == None:
@@ -143,7 +143,7 @@ InFuncMessage_ForceMode = ""
 Domain = "mangalib.me"
 
 # Обработка флага: режим перезаписи.
-if "f" in CommandDataStruct.Flags and CommandDataStruct.Name not in ["repair"]:
+if "f" in CommandDataStruct.flags and CommandDataStruct.name not in ["repair"]:
 	# Включение режима перезаписи.
 	IsForceModeActivated = True
 	# Запись в лог сообщения: включён режим перезаписи.
@@ -158,12 +158,12 @@ else:
 	InFuncMessage_ForceMode = "Force mode: OFF\n"
 	
 # Обработка флага: парсинг хентая.
-if "h" in CommandDataStruct.Flags:
+if "h" in CommandDataStruct.flags:
 	# Изменение домена.
 	Domain = "hentailib.me"
 	
 # Обработка флага: парсинг яоя.
-if "y" in CommandDataStruct.Flags:
+if "y" in CommandDataStruct.flags:
 	# Изменение домена.
 	Domain = "yaoilib.me"
 	
@@ -173,7 +173,7 @@ InFuncMessage_Domain = f"Domain: {Domain}\n"
 logging.info(f"Domain: \"{Domain}\".")
 
 # Обработка флага: выключение ПК после завершения работы скрипта.
-if "s" in CommandDataStruct.Flags:
+if "s" in CommandDataStruct.flags:
 	# Включение режима.
 	IsShutdowAfterEnd = True
 	# Запись в лог сообщения о том, что ПК будет выключен после завершения работы.
@@ -186,14 +186,14 @@ if "s" in CommandDataStruct.Flags:
 #==========================================================================================#
 
 # Экземпляр навигатора.
-Requestor = WebRequestor(Logging = True)
+Requestor = WebRequestor(logging = True)
 # Установка прокси.
-if Settings["proxy"]["enable"] == True: Requestor.addProxy(
+if Settings["proxy"]["enable"] == True: Requestor.add_proxy(
 	Protocols.HTTPS,
-	Host = Settings["proxy"]["host"],
-	Port = Settings["proxy"]["port"],
-	Login = Settings["proxy"]["login"],
-	Password = Settings["proxy"]["password"]
+	host = Settings["proxy"]["host"],
+	port = Settings["proxy"]["port"],
+	login = Settings["proxy"]["login"],
+	password = Settings["proxy"]["password"]
 )
 # Установка конфигурации.
 Requestor.initialize(HttpxConfig() if Domain != "mangalib.me" else RequestsConfig())
@@ -205,16 +205,16 @@ Authorizate(Settings, Requestor, Domain)
 #==========================================================================================#
 
 # Обработка команды: getcov.
-if "getcov" == CommandDataStruct.Name:
+if "getcov" == CommandDataStruct.name:
 	# Запись в лог сообщения: заголовок парсинга.
 	logging.info("====== Parsing ======")
 	# Парсинг тайтла (без глав).
-	LocalTitle = TitleParser(Settings, Requestor, CommandDataStruct.Arguments[0], Domain, ForceMode = IsForceModeActivated, Message = InFuncMessage_Shutdown + InFuncMessage_ForceMode + InFuncMessage_Domain, Amending = False)
+	LocalTitle = TitleParser(Settings, Requestor, CommandDataStruct.arguments[0], Domain, ForceMode = IsForceModeActivated, Message = InFuncMessage_Shutdown + InFuncMessage_ForceMode + InFuncMessage_Domain, Amending = False)
 	# Сохранение локальных файлов тайтла.
 	LocalTitle.downloadCover()
 
 # Обработка команды: parse.
-if "parse" == CommandDataStruct.Name:
+if "parse" == CommandDataStruct.name:
 	# Запись в лог сообщения: заголовок парсинга.
 	logging.info("====== Parsing ======")
 	# Список тайтлов для парсинга.
@@ -223,7 +223,7 @@ if "parse" == CommandDataStruct.Name:
 	StartSlugIndex = 0
 	
 	# Если активирован флаг парсинга коллекций.
-	if "collection" in CommandDataStruct.Flags:
+	if "collection" in CommandDataStruct.flags:
 		
 		# Если существует файл коллекции.
 		if os.path.exists("Collection.txt"):
@@ -248,7 +248,7 @@ if "parse" == CommandDataStruct.Name:
 			raise FileNotFoundError("Collection.txt")
 		
 	# Если активирован флаг обновления локальных файлов.
-	elif "local" in CommandDataStruct.Flags:
+	elif "local" in CommandDataStruct.flags:
 		# Вывод в консоль: идёт поиск тайтлов.
 		print("Scanning titles...")
 		# Получение списка файлов в директории.
@@ -268,17 +268,17 @@ if "parse" == CommandDataStruct.Name:
 
 	else:
 		# Добавление аргумента в очередь парсинга.
-		TitlesList.append(CommandDataStruct.Arguments[0])
+		TitlesList.append(CommandDataStruct.arguments[0])
 
 	# Если указан алиас, с которого необходимо начать.
-	if "from" in CommandDataStruct.Keys:
+	if "from" in CommandDataStruct.keys:
 		
 		# Если алиас присутствует в списке.
-		if CommandDataStruct.Values["from"] in TitlesList:
+		if CommandDataStruct.values["from"] in TitlesList:
 			# Запись в лог сообщения: парсинг коллекции начнётся с алиаса.
-			logging.info("Parcing will be started from \"" + CommandDataStruct.Values["from"] + "\".")
+			logging.info("Parcing will be started from \"" + CommandDataStruct.values["from"] + "\".")
 			# Задать стартовый индекс, равный индексу алиаса в коллекции.
-			StartSlugIndex = TitlesList.index(CommandDataStruct.Values["from"])
+			StartSlugIndex = TitlesList.index(CommandDataStruct.values["from"])
 			
 		else:
 			# Запись в лог предупреждения: стартовый алиас не найден.
@@ -302,11 +302,11 @@ if "parse" == CommandDataStruct.Name:
 		time.sleep(Settings["delay"])
 		
 # Обработка команды: repair.
-if "repair" == CommandDataStruct.Name:
+if "repair" == CommandDataStruct.name:
 	# Запись в лог сообщения: восстановление.
 	logging.info("====== Repairing ======")
 	# Название файла тайтла с расширением.
-	Filename = (CommandDataStruct.Arguments[0] + ".json") if ".json" not in CommandDataStruct.Arguments[0] else CommandDataStruct.Arguments[0]
+	Filename = (CommandDataStruct.arguments[0] + ".json") if ".json" not in CommandDataStruct.arguments[0] else CommandDataStruct.arguments[0]
 	# Чтение тайтла.
 	TitleContent = ReadJSON(Settings["titles-directory"] + Filename)
 	# Генерация сообщения.
@@ -318,12 +318,12 @@ if "repair" == CommandDataStruct.Name:
 	# Парсинг тайтла.
 	LocalTitle = TitleParser(Settings, Requestor, TitleSlug, Domain, ForceMode = False, Message = ExternalMessage, Amending = False)
 	# Восстановление главы.
-	LocalTitle.repairChapter(CommandDataStruct.Values["chapter"])
+	LocalTitle.repairChapter(CommandDataStruct.values["chapter"])
 	# Сохранение локальных файлов тайтла.
 	LocalTitle.save()
 	
 # Обработка команды: update.
-if "update" == CommandDataStruct.Name:
+if "update" == CommandDataStruct.name:
 	# Запись в лог сообщения: получение списка обновлений.
 	logging.info("====== Updating ======")
 	# Индекс стартового алиаса.
@@ -334,14 +334,14 @@ if "update" == CommandDataStruct.Name:
 	TitlesList = UpdateChecker.getUpdatesList()
 		
 	# Если указан стартовый тайтл.
-	if "from" in CommandDataStruct.Keys:
+	if "from" in CommandDataStruct.keys:
 		# Запись в лог сообщения: стартовый тайтл обновления.
-		logging.info("Updating starts from title with slug: \"" + CommandDataStruct.Values["from"] + "\".")
+		logging.info("Updating starts from title with slug: \"" + CommandDataStruct.values["from"] + "\".")
 				
 		# Если стартовый алиас найден.
-		if CommandDataStruct.Values["from"] in TitlesList:
+		if CommandDataStruct.values["from"] in TitlesList:
 			# Указать индекс алиаса в качестве стартового.
-			StartIndex = TitlesList.index(CommandDataStruct.Values["from"])
+			StartIndex = TitlesList.index(CommandDataStruct.values["from"])
 			
 		else:
 			# Запись в лог предупреждения: стартовый алиас не найден.
@@ -364,7 +364,7 @@ if "update" == CommandDataStruct.Name:
 		LocalTitle = None
 			
 		# Если включено обновление только описания.
-		if "onlydesc" in CommandDataStruct.Flags:
+		if "onlydesc" in CommandDataStruct.flags:
 			# Парсинг тайтла (без глав).
 			LocalTitle = TitleParser(Settings, Requestor, TitlesList[Index], Domain, ForceMode = IsForceModeActivated, Message = ExternalMessage, Amending = False)
 				

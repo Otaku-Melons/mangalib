@@ -7,7 +7,7 @@
 3. В среду исполнения установить следующие пакеты: [BeautifulSoup4](https://launchpad.net/beautifulsoup), [dublib](https://github.com/DUB1401/dublib).
 ```
 pip install BeautifulSoup4
-pip install dublib==0.2.0
+pip install dublib
 ```
 Либо установить сразу все пакеты при помощи следующей команды, выполненной из директории скрипта.
 ```

@@ -26,7 +26,7 @@ def Authorizate(Settings: dict, Requestor: WebRequestor, Domain: str):
 				"Content-Type": "application/x-www-form-urlencoded"
 			}
 			# Запрос авторизации.
-			Response = Requestor.post(f"https://lib.social/login?from=https%3A%2F%2F{Domain}%2F", Data = Data, Headers = Headers, TriesCount = 1)
+			Response = Requestor.post(f"https://lib.social/login?from=https%3A%2F%2F{Domain}%2F", data = Data, headers = Headers, tries = 1)
 			
 		except Exception as ExceptionData:
 			# Запись в лог ошибки: не удалось выполнить авторизацию.

@@ -63,7 +63,7 @@ class Updater:
 			# Заголовки запроса.
 			RequestHeaders = {"X-Csrf-Token": Token}
 			# Выполнение запроса.
-			Response = self.__Requestor.post(f"https://{self.__Domain}/api/list", JSON = RequestJSON, Headers = RequestHeaders)
+			Response = self.__Requestor.post(f"https://{self.__Domain}/api/list", json = RequestJSON, headers = RequestHeaders)
 			
 			# Проверка успешности запроса.
 			if Response.status_code == 200:
