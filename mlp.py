@@ -55,21 +55,11 @@ Cls()
 # Чтение настроек.
 Settings = ReadJSON("Settings.json")
 
-# Если путь к директории обложек не указан, задать стандартный.
-if Settings["covers-directory"] == "":
-	Settings["covers-directory"] = "Covers/"
-	
-# Если путь к директории обложек не заканчивается слэшем, то добавить его.
-elif Settings["covers-directory"][-1] != '/':
-	Settings["covers-directory"] += "/"
-
-# Если путь к директории тайтлов не указан, задать стандартный.
-if Settings["titles-directory"] == "":
-	Settings["titles-directory"] = "Titles/"
-	
-# Если путь к директории тайтлов не заканчивается слэшем, то добавить его.
-elif Settings["titles-directory"][-1] != '/':
-	Settings["titles-directory"] += "/"
+# Форматирование путей.
+if Settings["covers-directory"] == "": Settings["covers-directory"] = "Covers/"
+if Settings["covers-directory"][-1] != '/': Settings["covers-directory"] += "/"
+if Settings["titles-directory"] == "": Settings["titles-directory"] = "Titles/"
+if Settings["titles-directory"][-1] != '/': Settings["titles-directory"] += "/"
 
 # Запись в лог сообщения: статус режима использования ID вместо алиаса.
 logging.info("Using ID instead slug: " + ("ON." if Settings["use-id-instead-slug"] == True else "OFF."))
