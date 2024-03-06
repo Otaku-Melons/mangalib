@@ -11,7 +11,7 @@ import json
 # Словарь ID сайтов.
 SITES_ID = {
 	"mangalib.me": "1",	
-	"hentailib.me": "4",	
+	"v1.hentailib.org": "4",	
 	"yaoilib.me": "2",	
 }
 
@@ -95,7 +95,7 @@ class Updater:
 				# Завершение цикла обновления.
 				IsTimeElapse = True
 				# Запись в лог ошибки: не удалось запросить обновления.
-				logging.error("Unable to fetch titles updates.")
+				logging.error("Unable to fetch titles updates. Status code: " + str(Response.status_code) + ".")
 				
 			# Проверка: завершён ли цикл.
 			if IsTimeElapse == False:

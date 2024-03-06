@@ -150,7 +150,7 @@ else:
 # Обработка флага: парсинг хентая.
 if "h" in CommandDataStruct.flags:
 	# Изменение домена.
-	Domain = "hentailib.me"
+	Domain = "v1.hentailib.org"
 	
 # Обработка флага: парсинг яоя.
 if "y" in CommandDataStruct.flags:
@@ -186,7 +186,7 @@ if Settings["proxy"]["enable"] == True: Requestor.add_proxy(
 	password = Settings["proxy"]["password"]
 )
 # Установка конфигурации.
-Requestor.initialize(HttpxConfig() if Domain != "mangalib.me" else RequestsConfig())
+Requestor.initialize()
 # Авторизация.
 Authorizate(Settings, Requestor, Domain)
 

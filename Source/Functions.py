@@ -1,5 +1,6 @@
 from dublib.WebRequestor import WebRequestor
 from bs4 import BeautifulSoup
+from time import sleep
 
 import datetime
 import logging
@@ -9,10 +10,28 @@ def Authorizate(Settings: dict, Requestor: WebRequestor, Domain: str):
 	
 	# Если указаны логин и пароль.
 	if type(Settings["login"]) == str and len(Settings["login"]) > 0 and type(Settings["password"]) == str and len(Settings["password"]) > 0:
+		# Код первого запроса.
+		ResponseCode = 0
+		# Ответ.
+		Response = None
+		# Индекс повтора авторизации.
+		AuthIndex = 0
 		
 		try:
-			# Запрос страницы авторизации.
-			Response = Requestor.get(f"https://{Domain}/")
+			
+			# Пока запрос не будет успешно выполнен.
+			while ResponseCode != 200:
+				# Запрос главной страницы.
+				Response = Requestor.get(f"https://{Domain}/")
+				# Запись кода.
+				ResponseCode = Response.status_code
+				# Выжидание интервала.
+				sleep(Settings["delay"])
+				# Инкремент индекса попытки.
+				AuthIndex += 1
+				# Если индекс повтора превышает максимальное количество, выбросить исключение.
+				if AuthIndex > 30: raise Exception("The maximum number of authorization attempts has been reached.")
+				
 			# Запрос страницы авторизации.
 			Response = Requestor.get(f"https://lib.social/login?from=https%3A%2F%2F{Domain}%2F")
 			# Получение токена страницы.
@@ -26,7 +45,7 @@ def Authorizate(Settings: dict, Requestor: WebRequestor, Domain: str):
 				"Content-Type": "application/x-www-form-urlencoded"
 			}
 			# Запрос авторизации.
-			Response = Requestor.post(f"https://lib.social/login?from=https%3A%2F%2F{Domain}%2F", data = Data, headers = Headers, tries = 1)
+			Response = Requestor.post(f"https://lib.social/login", data = Data, headers = Headers, tries = 1)
 			
 		except Exception as ExceptionData:
 			# Запись в лог ошибки: не удалось выполнить авторизацию.

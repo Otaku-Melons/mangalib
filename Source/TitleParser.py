@@ -508,7 +508,7 @@ class TitleParser:
 			# Получение данных тайтла.
 			self.__Data = self.__GetTitleData(Page)
 			# Заполнение описания тайтла.
-			self.__Title["site"] = self.__Domain
+			self.__Title["site"] = self.__Domain.replace("v1.", "").replace(".org", ".me")
 			self.__Title["id"] = self.__Data["manga"]["id"]
 			self.__Title["slug"] = self.__Slug
 			self.__Title["covers"] = list()
@@ -547,7 +547,7 @@ class TitleParser:
 			if Response.status_code == 404:
 				# Запись в лог ошибки: тайтл не найден.
 				logging.error("Title: \"" + self.__Title["slug"] + "\". Not found. Skipped.")
-
+			
 			# Запись в лог ошибки: нет доступа к тайтлу.
 			logging.error("Title: \"" + self.__Slug + "\". Not accessed. Skipped.")
 			# Переключение статуса тайтла.
