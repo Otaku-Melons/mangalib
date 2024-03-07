@@ -16,6 +16,12 @@ def Authorizate(Settings: dict, Requestor: WebRequestor, Domain: str):
 		Response = None
 		# Индекс повтора авторизации.
 		AuthIndex = 0
+		# Заголовки запроса.
+		Headers = {
+			"Origin": "https://lib.social",
+			"Referer": "https://lib.social/login",
+			"Content-Type": "application/x-www-form-urlencoded"
+		}
 		
 		try:
 			
@@ -23,33 +29,32 @@ def Authorizate(Settings: dict, Requestor: WebRequestor, Domain: str):
 			while ResponseCode != 200:
 				# Запрос главной страницы.
 				Response = Requestor.get(f"https://{Domain}/")
-				# Запись кода.
-				ResponseCode = Response.status_code
+				# Запрос страницы авторизации.
+				Response = Requestor.get(f"https://lib.social/login?from=https%3A%2F%2F{Domain}%2F")
+				
+				# Если запрос успешен.
+				if Response.status_code == 200:
+					# Получение токена страницы.
+					Token = BeautifulSoup(Response.text, "html.parser").find("meta", {"name": "_token"})["content"]
+					# Данные авторизации.
+					Data = f"_token={Token}&email=" + Settings["login"] + "&password=" + Settings["password"] + f"&remember=on&from=https%3A%2F%2F{Domain}%2F"
+					# Запрос авторизации.
+					Response = Requestor.post(f"https://lib.social/login", data = Data, headers = Headers, tries = 1)
+					# Запись кода.
+					ResponseCode = Response.status_code
+					
 				# Выжидание интервала.
 				sleep(Settings["delay"])
 				# Инкремент индекса попытки.
 				AuthIndex += 1
 				# Если индекс повтора превышает максимальное количество, выбросить исключение.
-				if AuthIndex > 30: raise Exception("The maximum number of authorization attempts has been reached.")
-				
-			# Запрос страницы авторизации.
-			Response = Requestor.get(f"https://lib.social/login?from=https%3A%2F%2F{Domain}%2F")
-			# Получение токена страницы.
-			Token = BeautifulSoup(Response.text, "html.parser").find("meta", {"name": "_token"})["content"]
-			# Данные авторизации.
-			Data = f"_token={Token}&email=" + Settings["login"] + "&password=" + Settings["password"] + f"&remember=on&from=https%3A%2F%2F{Domain}%2F"
-			# Заголовки запроса.
-			Headers = {
-				"Origin": "https://lib.social",
-				"Referer": "https://lib.social/login",
-				"Content-Type": "application/x-www-form-urlencoded"
-			}
-			# Запрос авторизации.
-			Response = Requestor.post(f"https://lib.social/login", data = Data, headers = Headers, tries = 1)
+				if AuthIndex > 10: raise Exception("The maximum number of authorization attempts has been reached.")
 			
 		except Exception as ExceptionData:
-			# Запись в лог ошибки: не удалось выполнить авторизацию.
-			logging.error("Unable to authorizate. Description: \"" + str(ExceptionData).rstrip(".") + "\".")
+			# Запись в лог критической ошибки: не удалось выполнить авторизацию.
+			logging.critical("Unable to authorizate. Description: \"" + str(ExceptionData).rstrip(".") + "\".")
+			# Завершение процесса.
+			exit(1)
 
 # Проевращает число секунд в строку-дескриптор времени по формату [<x> hours <y> minuts <z> seconds].
 def SecondsToTimeString(Seconds: float) -> str:

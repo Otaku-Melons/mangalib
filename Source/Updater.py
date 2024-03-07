@@ -46,6 +46,8 @@ class Updater:
 		Token = BeautifulSoup(Response.text, "html.parser").find("meta", {"name": "_token"})["content"]
 		# Текущее время.
 		Now = datetime.datetime.now()
+		# Выжидание интервала.
+		sleep(self.__Settings["delay"])
 		
 		# Проверка обновлений за указанный промежуток времени.
 		while IsTimeElapse == False:
@@ -61,7 +63,11 @@ class Updater:
 				"caution_list": ["Отсутствует", "16+", "18+"]
 			}
 			# Заголовки запроса.
-			RequestHeaders = {"X-Csrf-Token": Token}
+			RequestHeaders = {
+				"Origin": f"https://{self.__Domain}",
+				"Referer": f"https://{self.__Domain}/manga-list",
+				"X-Csrf-Token": Token
+			}
 			# Выполнение запроса.
 			Response = self.__Requestor.post(f"https://{self.__Domain}/api/list", json = RequestJSON, headers = RequestHeaders)
 			
@@ -94,8 +100,10 @@ class Updater:
 			else:
 				# Завершение цикла обновления.
 				IsTimeElapse = True
-				# Запись в лог ошибки: не удалось запросить обновления.
-				logging.error("Unable to fetch titles updates. Status code: " + str(Response.status_code) + ".")
+				# Запись в лог критической ошибки: не удалось запросить обновления.
+				logging.critical("Unable to fetch titles updates. Status code: " + str(Response.status_code) + ".")
+				# Завершение процесса.
+				exit(1)
 				
 			# Проверка: завершён ли цикл.
 			if IsTimeElapse == False:
