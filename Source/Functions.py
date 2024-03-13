@@ -55,6 +55,9 @@ def Authorizate(Settings: dict, Requestor: WebRequestor, Domain: str):
 			logging.critical("Unable to authorizate. Description: \"" + str(ExceptionData).rstrip(".") + "\".")
 			# Завершение процесса.
 			exit(1)
+			
+		# Запись в лог сообщения: авторизация успешна.
+		logging.info("Successfully authorized.")
 
 # Проевращает число секунд в строку-дескриптор времени по формату [<x> hours <y> minuts <z> seconds].
 def SecondsToTimeString(Seconds: float) -> str:

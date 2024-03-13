@@ -110,7 +110,7 @@ class TitleParser:
 					# Инкремент количества обновлённых глав.
 					AmendedChaptersCount += 1
 					# Запись в лог сообщения: глава дополнена.
-					logging.info("Title: \"" + self.__Slug + "\". Chapter " + str(self.__Title["chapters"][BranchID][ChapterIndex]["id"]) + " amended.")
+					if Slides != []: logging.info("Title: \"" + self.__Slug + "\". Chapter " + str(self.__Title["chapters"][BranchID][ChapterIndex]["id"]) + " amended.")
 					# Запись информации о слайде.
 					self.__Title["chapters"][BranchID][ChapterIndex]["slides"] = Slides
 					# Выжидание интервала.
@@ -130,7 +130,7 @@ class TitleParser:
 		for Chapter in Data["chapters"]["list"]:
 			
 			# Если глава не принадлежит ветви перевода.
-			if Chapter["branch_id"] == None and Chapter["chapter_name"] != None:
+			if Chapter["branch_id"] == None:
 				# ID ветви.
 				BranchID = str(self.__Title["id"]) + str(0)
 				
@@ -146,7 +146,7 @@ class TitleParser:
 						"chapters-count": 1
 					}
 				
-			elif Chapter["chapter_name"] != None:
+			else:
 				# ID ветви.
 				BranchID = str(self.__Title["id"]) + str(Chapter["branch_id"])
 				
@@ -192,19 +192,17 @@ class TitleParser:
 				"slides": list()
 			}
 			
-			# Если глава валидна.
-			if Chapter["chapter_name"] != None:
-				# Генерация ID ветви.
-				BranchID = str(self.__Title["id"]) + (str(ToInt(Chapter["branch_id"])) if Chapter["branch_id"] != None else "0")
+			# Генерация ID ветви.
+			BranchID = str(self.__Title["id"]) + (str(ToInt(Chapter["branch_id"])) if Chapter["branch_id"] != None else "0")
 				
-				# Поиск нужной ветви.
-				for Branch in Data["chapters"]["branches"]:
+			# Поиск нужной ветви.
+			for Branch in Data["chapters"]["branches"]:
 					
-					# Если найдена нужная ветвь, записать переводчика.
-					if Branch["id"] == Chapter["branch_id"] and len(Branch["teams"]) > 0: Bufer["translator"] = Branch["teams"][0]["name"]
+				# Если найдена нужная ветвь, записать переводчика.
+				if Branch["id"] == Chapter["branch_id"] and len(Branch["teams"]) > 0: Bufer["translator"] = Branch["teams"][0]["name"]
 
-				# Запись главы.
-				Chapters[BranchID].append(Bufer)
+			# Запись главы.
+			Chapters[BranchID].append(Bufer)
 			
 		# Для каждой ветви.
 		for BranchID in Chapters.keys():
@@ -326,7 +324,7 @@ class TitleParser:
 					
 			else:
 				# Запись в лог предупреждения: не удалось получить слайды.
-				logging.warning(f"Title: \"{self.__Slug}\". Chapter {ChapterID}. Unable to load slides.")
+				logging.warning(f"Title: \"{self.__Slug}\". Chapter {ChapterID}. Unable to load slides. Request code: {Response.status_code}.")
 			
 		return Slides
 	
