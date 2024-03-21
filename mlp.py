@@ -1,7 +1,7 @@
 from dublib.Methods import Cls, CheckPythonMinimalVersion, MakeRootDirectories, ReadJSON, Shutdown
-from dublib.WebRequestor import HttpxConfig, WebRequestor, RequestsConfig, Protocols
 from dublib.Terminalyzer import ArgumentsTypes, Command, Terminalyzer
 from Source.Functions import Authorizate, SecondsToTimeString
+from dublib.WebRequestor import WebRequestor, Protocols
 from Source.TitleParser import TitleParser
 from Source.Updater import Updater
 

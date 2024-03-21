@@ -18,9 +18,10 @@ def Authorizate(Settings: dict, Requestor: WebRequestor, Domain: str):
 		AuthIndex = 0
 		# Заголовки запроса.
 		Headers = {
-			"Origin": "https://lib.social",
-			"Referer": "https://lib.social/login",
-			"Content-Type": "application/x-www-form-urlencoded"
+			"Referer": f"https://lib.social/login?from=https%3A%2F%2F{Domain}%2F",
+			"Accept": "*/*",
+			"Accept-Encoding": "gzip, deflate, br",
+			"Connection": "keep-alive"
 		}
 		
 		try:
@@ -28,9 +29,20 @@ def Authorizate(Settings: dict, Requestor: WebRequestor, Domain: str):
 			# Пока запрос не будет успешно выполнен.
 			while ResponseCode != 200:
 				# Запрос главной страницы.
-				Response = Requestor.get(f"https://{Domain}/")
+				Response = Requestor.get(f"https://{Domain}/", headers = Headers)
+				# Установка кука CloudFlare.
+				Headers["Cookie"] = "__cf_bm=" + Response.cookies.get_dict()["__cf_bm"]
+				# Запрос главной страницы с куком авторизации CloudFlare.
+				Response = Requestor.get(f"https://{Domain}/", headers = Headers)
+				# Удаление кука CloudFlare.
+				del Headers["Cookie"]
+				# Выжидание интервала.
+				sleep(Settings["delay"])
 				# Запрос страницы авторизации.
-				Response = Requestor.get(f"https://lib.social/login?from=https%3A%2F%2F{Domain}%2F")
+				Response = Requestor.get(f"https://lib.social/login?from=https%3A%2F%2F{Domain}%2F", headers = Headers)
+				# Добавление заголовков.
+				Headers["Content-Type"] = "application/x-www-form-urlencoded"
+				Headers["Origin"] = "https://lib.social"
 				
 				# Если запрос успешен.
 				if Response.status_code == 200:
@@ -39,7 +51,7 @@ def Authorizate(Settings: dict, Requestor: WebRequestor, Domain: str):
 					# Данные авторизации.
 					Data = f"_token={Token}&email=" + Settings["login"] + "&password=" + Settings["password"] + f"&remember=on&from=https%3A%2F%2F{Domain}%2F"
 					# Запрос авторизации.
-					Response = Requestor.post(f"https://lib.social/login", data = Data, headers = Headers, tries = 1)
+					Response = Requestor.post(f"https://lib.social/login", data = Data, headers = Headers)
 					# Запись кода.
 					ResponseCode = Response.status_code
 					
@@ -48,7 +60,7 @@ def Authorizate(Settings: dict, Requestor: WebRequestor, Domain: str):
 				# Инкремент индекса попытки.
 				AuthIndex += 1
 				# Если индекс повтора превышает максимальное количество, выбросить исключение.
-				if AuthIndex > 10: raise Exception("The maximum number of authorization attempts has been reached.")
+				if AuthIndex > 2: raise Exception("The maximum number of authorization attempts has been reached.")
 			
 		except Exception as ExceptionData:
 			# Запись в лог критической ошибки: не удалось выполнить авторизацию.
@@ -58,7 +70,7 @@ def Authorizate(Settings: dict, Requestor: WebRequestor, Domain: str):
 			
 		# Запись в лог сообщения: авторизация успешна.
 		logging.info("Successfully authorized.")
-
+		
 # Проевращает число секунд в строку-дескриптор времени по формату [<x> hours <y> minuts <z> seconds].
 def SecondsToTimeString(Seconds: float) -> str:
 	# Количество часов.
