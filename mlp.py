@@ -155,7 +155,7 @@ if "h" in CommandDataStruct.flags:
 # Обработка флага: парсинг яоя.
 if "y" in CommandDataStruct.flags:
 	# Изменение домена.
-	Domain = "yaoilib.me"
+	Domain = "v1.yaoilib.me"
 	
 # Сообщение для внутренних функций: домен.
 InFuncMessage_Domain = f"Domain: {Domain}\n"

@@ -30,12 +30,14 @@ def Authorizate(Settings: dict, Requestor: WebRequestor, Domain: str):
 			while ResponseCode != 200:
 				# Запрос главной страницы.
 				Response = Requestor.get(f"https://{Domain}/", headers = Headers)
-				# Установка кука CloudFlare.
-				Headers["Cookie"] = "__cf_bm=" + Response.cookies.get_dict()["__cf_bm"]
+				# Куки ответа.
+				ResponseCookies = Response.cookies.get_dict()
+				# Если получен кук CloudFlare, установить его.
+				if "__cf_bm" in ResponseCookies.keys(): Headers["Cookie"] = "__cf_bm=" + Response.cookies.get_dict()["__cf_bm"]
 				# Запрос главной страницы с куком авторизации CloudFlare.
 				Response = Requestor.get(f"https://{Domain}/", headers = Headers)
-				# Удаление кука CloudFlare.
-				del Headers["Cookie"]
+				# Если присутствует кук CloudFlare, удалить его.
+				if "__cf_bm" in ResponseCookies.keys(): del Headers["Cookie"]
 				# Выжидание интервала.
 				sleep(Settings["delay"])
 				# Запрос страницы авторизации.
