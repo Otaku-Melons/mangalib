@@ -500,7 +500,7 @@ class TitleParser:
 		Response = self.__Requestor.get(f"https://{self.__Domain}/{self.__Slug}?section=info")
 		
 		# Если запрос успешен.
-		if Response.status_code == 200 and "Данный тайтл недоступно на территории РФ." not in Response.text:
+		if Response.status_code == 200 and "Данный тайтл недоступно на территории РФ." not in Response.text and "Обновления популярной манги" not in Response.text:
 			# Парсинг страницы описания.
 			Page = BeautifulSoup(Response.text, "html.parser")
 			# Получение данных тайтла.
@@ -542,12 +542,14 @@ class TitleParser:
 		else:
 			
 			# Если тайтл не найден.
-			if Response.status_code == 404:
+			if Response.status_code == 404 or "Обновления популярной манги" in Response.text :
 				# Запись в лог ошибки: тайтл не найден.
 				logging.error("Title: \"" + self.__Title["slug"] + "\". Not found. Skipped.")
-			
-			# Запись в лог ошибки: нет доступа к тайтлу.
-			logging.error("Title: \"" + self.__Slug + "\". Not accessed. Skipped.")
+				
+			else:
+				# Запись в лог ошибки: нет доступа к тайтлу.
+				logging.error("Title: \"" + self.__Slug + "\". Not accessed. Skipped.")
+				
 			# Переключение статуса тайтла.
 			self.__IsActive = False
 	
@@ -672,7 +674,7 @@ class TitleParser:
 			"format": "dmp-v1",
 			"site": None,
 			"id": None,
-			"slug": None,
+			"slug": Slug,
 			"covers": list(),
 			"ru-name": None,
 			"en-name": None,
