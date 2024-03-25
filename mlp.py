@@ -1,7 +1,7 @@
 from dublib.Methods import Cls, CheckPythonMinimalVersion, MakeRootDirectories, ReadJSON, Shutdown
+from dublib.WebRequestor import Protocols, WebConfig, WebLibs, WebRequestor
 from dublib.Terminalyzer import ArgumentsTypes, Command, Terminalyzer
 from Source.Functions import Authorizate, SecondsToTimeString
-from dublib.WebRequestor import WebRequestor, Protocols
 from Source.TitleParser import TitleParser
 from Source.Updater import Updater
 
@@ -18,7 +18,7 @@ import os
 # Проверка поддержки используемой версии Python.
 CheckPythonMinimalVersion(3, 10)
 # Создание папок в корневой директории.
-MakeRootDirectories(["Covers", "Logs", "Titles"])
+MakeRootDirectories(["Logs"])
 
 #==========================================================================================#
 # >>>>> НАСТРОЙКА ЛОГГИРОВАНИЯ <<<<< #
@@ -150,12 +150,12 @@ else:
 # Обработка флага: парсинг хентая.
 if "h" in CommandDataStruct.flags:
 	# Изменение домена.
-	Domain = "v1.hentailib.org"
+	Domain = "hentailib.me"
 	
 # Обработка флага: парсинг яоя.
 if "y" in CommandDataStruct.flags:
 	# Изменение домена.
-	Domain = "v1.yaoilib.me"
+	Domain = "yaoilib.me"
 	
 # Сообщение для внутренних функций: домен.
 InFuncMessage_Domain = f"Domain: {Domain}\n"
@@ -175,8 +175,13 @@ if "s" in CommandDataStruct.flags:
 # >>>>> ИНИЦИАЛИЗАЦИЯ МЕНЕДЖЕРА ЗАПРОСОВ <<<<< #
 #==========================================================================================#
 
-# Экземпляр навигатора.
-Requestor = WebRequestor(logging = True)
+# Конфигурация менеджера запросов.
+Config = WebConfig()
+Config.select_lib(WebLibs.curl_cffi)
+Config.generate_user_agent()
+Config.curl_cffi.enable_http2(True)
+# Инициализация менеджера запросов.
+Requestor = WebRequestor(Config)
 # Установка прокси.
 if Settings["proxy"]["enable"] == True: Requestor.add_proxy(
 	Protocols.HTTPS,
@@ -185,8 +190,6 @@ if Settings["proxy"]["enable"] == True: Requestor.add_proxy(
 	login = Settings["proxy"]["login"],
 	password = Settings["proxy"]["password"]
 )
-# Установка конфигурации.
-Requestor.initialize()
 # Авторизация.
 Authorizate(Settings, Requestor, Domain)
 
