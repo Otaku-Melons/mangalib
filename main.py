@@ -2,8 +2,9 @@ from dublib.Methods import Cls, CheckPythonMinimalVersion, MakeRootDirectories, 
 from dublib.WebRequestor import Protocols, WebConfig, WebLibs, WebRequestor
 from dublib.Terminalyzer import ArgumentsTypes, Command, Terminalyzer
 from Source.Functions import Authorizate, SecondsToTimeString
-from Source.TitleParser import TitleParser
+from Source.Builder import Builder
 from Source.Updater import Updater
+from Source.Parser import Parser
 
 import datetime
 import logging
@@ -55,11 +56,12 @@ Cls()
 # Чтение настроек.
 Settings = ReadJSON("Settings.json")
 
-# Форматирование путей.
-if Settings["covers-directory"] == "": Settings["covers-directory"] = "Covers/"
-if Settings["covers-directory"][-1] != '/': Settings["covers-directory"] += "/"
-if Settings["titles-directory"] == "": Settings["titles-directory"] = "Titles/"
-if Settings["titles-directory"][-1] != '/': Settings["titles-directory"] += "/"
+# Форматирование настроек.
+if not Settings["token"].lower().startswith("bearer "): Settings["token"] = "Bearer " + Settings["token"]
+if Settings["covers-directory"] == "": Settings["covers-directory"] = "Covers"
+Settings["covers-directory"] = Settings["covers-directory"].replace("\\", "/").rstrip("/")
+if Settings["titles-directory"] == "": Settings["titles-directory"] = "Titles"
+Settings["titles-directory"] = Settings["titles-directory"].replace("\\", "/").rstrip("/")
 
 # Запись в лог сообщения: статус режима использования ID вместо алиаса.
 logging.info("Using ID instead slug: " + ("ON." if Settings["use-id-instead-slug"] == True else "OFF."))
@@ -70,6 +72,16 @@ logging.info("Using ID instead slug: " + ("ON." if Settings["use-id-instead-slug
 
 # Список описаний обрабатываемых команд.
 CommandsList = list()
+
+# Создание команды: build.
+COM_build = Command("build")
+COM_build.add_argument(ArgumentsTypes.All, important = True)
+COM_build.add_flag_position(["cbz"])
+COM_build.add_flag_position(["no-filters"])
+COM_build.add_flag_position(["no-delay"])
+COM_build.add_key_position(["branch", "chapter", "volume"], ArgumentsTypes.All)
+COM_build.add_flag_position(["s"])
+CommandsList.append(COM_build)
 
 # Создание команды: getcov.
 COM_getcov = Command("getcov")
@@ -178,7 +190,7 @@ if "s" in CommandDataStruct.flags:
 # Конфигурация менеджера запросов.
 Config = WebConfig()
 Config.select_lib(WebLibs.curl_cffi)
-Config.generate_user_agent()
+Config.generate_user_agent("pc")
 Config.curl_cffi.enable_http2(True)
 # Инициализация менеджера запросов.
 Requestor = WebRequestor(Config)
@@ -190,19 +202,49 @@ if Settings["proxy"]["enable"] == True: Requestor.add_proxy(
 	login = Settings["proxy"]["login"],
 	password = Settings["proxy"]["password"]
 )
-# Авторизация.
-Authorizate(Settings, Requestor, Domain)
 
 #==========================================================================================#
 # >>>>> ОБРАБОТКА КОММАНД <<<<< #
 #==========================================================================================#
+
+# Обработка команды: build.
+if "build" == CommandDataStruct.name:
+	# Запись в лог сообщения: построение тайтла.
+	logging.info("====== Building ======")	
+	# Инициализация билдера.
+	BuilderObject = Builder(Settings, CommandDataStruct.arguments[0], InFuncMessage_Shutdown)
+	# Если задан флаг, изменить выходной формат на *.CBZ.
+	if "cbz" in CommandDataStruct.flags: BuilderObject.setOutputFormat("cbz")
+	# Если задан флаг, отключить фильтрацию.
+	if "no-filters" in CommandDataStruct.flags: BuilderObject.setFilterStatus(False)
+	# Если задан флаг, отключить интервал.
+	if "no-delay" in CommandDataStruct.flags: BuilderObject.setDelayStatus(False)
+	
+	# Если ключом указан ID главы для сборки.
+	if "chapter" in CommandDataStruct.keys:
+		# Построение главы.
+		BuilderObject.buildChapter(int(CommandDataStruct.values["chapter"]))
+	
+	# Если ключом указан номер тома для сборки.
+	elif "volume" in CommandDataStruct.keys:
+		# Построение тома.
+		BuilderObject.buildVolume(None, CommandDataStruct.values["volume"])
+	
+	# Если ключом указан номер ветви для сборки.
+	elif "branch" in CommandDataStruct.keys:
+		# Построение ветви.
+		BuilderObject.buildBranch(CommandDataStruct.values["branch"])
+	
+	else:
+		# Построение всего тайтла.
+		BuilderObject.buildBranch()
 
 # Обработка команды: getcov.
 if "getcov" == CommandDataStruct.name:
 	# Запись в лог сообщения: заголовок парсинга.
 	logging.info("====== Parsing ======")
 	# Парсинг тайтла (без глав).
-	LocalTitle = TitleParser(Settings, Requestor, CommandDataStruct.arguments[0], Domain, ForceMode = IsForceModeActivated, Message = InFuncMessage_Shutdown + InFuncMessage_ForceMode + InFuncMessage_Domain, Amending = False)
+	LocalTitle = Parser(Settings, Requestor, CommandDataStruct.arguments[0], Domain, force_mode = IsForceModeActivated, message = InFuncMessage_Shutdown + InFuncMessage_ForceMode + InFuncMessage_Domain, Amending = False)
 	# Сохранение локальных файлов тайтла.
 	LocalTitle.downloadCover()
 
@@ -252,7 +294,7 @@ if "parse" == CommandDataStruct.name:
 		# Чтение всех алиасов из локальных файлов.
 		for File in TitlesSlugs:
 			# JSON файл тайтла.
-			LocalTitle = ReadJSON(Settings["titles-directory"] + File)
+			LocalTitle = ReadJSON(Settings["titles-directory"] + "/" + File)
 			# Помещение алиаса в список.
 			TitlesList.append(str(LocalTitle["slug"]) if "slug" in LocalTitle.keys() else str(LocalTitle["dir"]))
 
@@ -286,9 +328,9 @@ if "parse" == CommandDataStruct.name:
 		# Генерация сообщения.
 		ExternalMessage = InFuncMessage_Shutdown + InFuncMessage_ForceMode + InFuncMessage_Domain + InFuncMessage_Progress if len(TitlesList) > 1 else InFuncMessage_Shutdown + InFuncMessage_ForceMode + InFuncMessage_Domain
 		# Парсинг тайтла.
-		LocalTitle = TitleParser(Settings, Requestor, TitlesList[Index], Domain, ForceMode = IsForceModeActivated, Message = ExternalMessage)
+		LocalTitle = Parser(Settings, Requestor, TitlesList[Index], Domain, force_mode = IsForceModeActivated, message = ExternalMessage)
 		# Загрузка обложки тайтла.
-		LocalTitle.downloadCover()
+		#LocalTitle.download_covers()
 		# Сохранение локальных файлов тайтла.
 		LocalTitle.save()
 		# Выжидание интервала.
@@ -301,7 +343,7 @@ if "repair" == CommandDataStruct.name:
 	# Название файла тайтла с расширением.
 	Filename = (CommandDataStruct.arguments[0] + ".json") if ".json" not in CommandDataStruct.arguments[0] else CommandDataStruct.arguments[0]
 	# Чтение тайтла.
-	TitleContent = ReadJSON(Settings["titles-directory"] + Filename)
+	TitleContent = ReadJSON(Settings["titles-directory"] + "/" + Filename)
 	# Генерация сообщения.
 	ExternalMessage = InFuncMessage_Shutdown
 	# Вывод в консоль: идёт процесс восстановления главы.
@@ -309,9 +351,9 @@ if "repair" == CommandDataStruct.name:
 	# Алиас тайтла.
 	TitleSlug = TitleContent["slug"]
 	# Парсинг тайтла.
-	LocalTitle = TitleParser(Settings, Requestor, TitleSlug, Domain, ForceMode = False, Message = ExternalMessage, Amending = False)
+	LocalTitle = Parser(Settings, Requestor, TitleSlug, Domain, force_mode = False, message = ExternalMessage, amending = False)
 	# Восстановление главы.
-	LocalTitle.repairChapter(CommandDataStruct.values["chapter"])
+	LocalTitle.repair_chapter(CommandDataStruct.values["chapter"])
 	# Сохранение локальных файлов тайтла.
 	LocalTitle.save()
 	
@@ -359,11 +401,11 @@ if "update" == CommandDataStruct.name:
 		# Если включено обновление только описания.
 		if "onlydesc" in CommandDataStruct.flags:
 			# Парсинг тайтла (без глав).
-			LocalTitle = TitleParser(Settings, Requestor, TitlesList[Index], Domain, ForceMode = IsForceModeActivated, Message = ExternalMessage, Amending = False)
+			LocalTitle = Parser(Settings, Requestor, TitlesList[Index], Domain, force_mode = IsForceModeActivated, message = ExternalMessage, amending = False)
 				
 		else:
 			# Парсинг тайтла.
-			LocalTitle = TitleParser(Settings, Requestor, TitlesList[Index], Domain, ForceMode = IsForceModeActivated, Message = ExternalMessage)
+			LocalTitle = Parser(Settings, Requestor, TitlesList[Index], Domain, force_mode = IsForceModeActivated, message = ExternalMessage)
 			# Загрузка обложки тайтла.
 			LocalTitle.downloadCover()
 			

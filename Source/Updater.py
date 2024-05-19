@@ -11,7 +11,7 @@ import json
 # Словарь ID сайтов.
 SITES_ID = {
 	"mangalib.me": "1",	
-	"v1.hentailib.org": "4",	
+	"hentailib.me": "4",	
 	"yaoilib.me": "2",	
 }
 

@@ -1,7 +1,6 @@
 {
-	"login": "",
-	"password": "",
-	"user-id": 0,
+	"token": "",
+	"server": "compress",
 	"use-id-instead-slug": false,
 	"check-updates-period": 24,
 	"titles-directory": "",

@@ -43,7 +43,7 @@ def Authorizate(Settings: dict, Requestor: WebRequestor, Domain: str):
 					# Получение токена страницы.
 					Token = BeautifulSoup(Response.text, "html.parser").find("meta", {"name": "_token"})["content"]
 					# Данные авторизации.
-					Data = f"_token={Token}&email=" + Settings["login"] + "&password=" + Settings["password"] + f"&remember=on&from=https%3A%2F%2F{Domain}%2F"
+					Data = f"_token={Token}&email=" + Settings["login"] + "&password=" + Settings["password"]
 					# Запрос авторизации.
 					Response = Requestor.post(f"https://lib.social/login", data = Data, headers = Headers)
 					# Запись кода.
