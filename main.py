@@ -1,440 +1,734 @@
-from dublib.Methods import Cls, CheckPythonMinimalVersion, MakeRootDirectories, ReadJSON, Shutdown
+from Source.Core.Formats.Manga import BaseStructs, Manga, Statuses, Types
+from Source.Core.Objects import Objects
+from Source.Core.Logger import Logger
+from Source.CLI.Templates import *
+
 from dublib.WebRequestor import Protocols, WebConfig, WebLibs, WebRequestor
-from dublib.Terminalyzer import ArgumentsTypes, Command, Terminalyzer
-from Source.Functions import Authorizate, SecondsToTimeString
-from Source.Builder import Builder
-from Source.Updater import Updater
-from Source.Parser import Parser
+from dublib.Methods import ReadJSON, RemoveRecurringSubstrings, Zerotify
+from datetime import datetime
+from time import sleep
 
-import datetime
-import logging
-import time
-import sys
-import os
+import urllib.parse
 
 #==========================================================================================#
-# >>>>> ИНИЦИАЛИЗАЦИЯ СКРИПТА <<<<< #
+# >>>>> ОПРЕДЕЛЕНИЯ <<<<< #
 #==========================================================================================#
 
-# Проверка поддержки используемой версии Python.
-CheckPythonMinimalVersion(3, 10)
-# Создание папок в корневой директории.
-MakeRootDirectories(["Logs"])
+VERSION = "3.0.0"
+REPOS = "https://github.com/DUB1401/mangalib"
+NAME = "mangalib"
+SITE = "test-front.mangalib.me"
+STRUCT = Manga()
 
 #==========================================================================================#
-# >>>>> НАСТРОЙКА ЛОГГИРОВАНИЯ <<<<< #
+# >>>>> ОСНОВНОЙ КЛАСС <<<<< #
 #==========================================================================================#
 
-# Получение текущей даты.
-CurrentDate = datetime.datetime.now()
-# Время запуска скрипта.
-StartTime = time.time()
-# Формирование пути к файлу лога.
-LogFilename = "Logs/" + str(CurrentDate)[:-7] + ".log"
-LogFilename = LogFilename.replace(":", "-")
-# Установка конфигнурации.
-logging.basicConfig(filename = LogFilename, encoding = "utf-8", level = logging.INFO, format = "%(asctime)s %(levelname)s: %(message)s", datefmt = "%Y-%m-%d %H:%M:%S")
-# Отключение части сообщений логов библиотеки requests.
-logging.getLogger("requests").setLevel(logging.CRITICAL)
-# Отключение части сообщений логов библиотеки urllib3.
-logging.getLogger("urllib3").setLevel(logging.CRITICAL)
-# Отключение части сообщений логов библиотеки httpx.
-logging.getLogger("httpx").setLevel(logging.CRITICAL)
+class Parser:
+	"""Модульный парсер."""
 
-#==========================================================================================#
-# >>>>> ЧТЕНИЕ НАСТРОЕК <<<<< #
-#==========================================================================================#
+	#==========================================================================================#
+	# >>>>> СВОЙСТВА ТОЛЬКО ДЛЯ ЧТЕНИЯ <<<<< #
+	#==========================================================================================#
 
-# Запись в лог сообщения: заголовок подготовки скрипта к работе.
-logging.info("====== Preparing to starting ======")
-# Запись в лог используемой версии Python.
-logging.info("Starting with Python " + str(sys.version_info.major) + "." + str(sys.version_info.minor) + "." + str(sys.version_info.micro) + " on " + str(sys.platform) + ".")
-# Запись команды, использовавшейся для запуска скрипта.
-logging.info("Launch command: \"" + " ".join(sys.argv[1:len(sys.argv)]) + "\".")
-# Очистка консоли.
-Cls()
-# Чтение настроек.
-Settings = ReadJSON("Settings.json")
+	@property
+	def site(self) -> str:
+		"""Домен целевого сайта."""
 
-# Форматирование настроек.
-if not Settings["token"].lower().startswith("bearer "): Settings["token"] = "Bearer " + Settings["token"]
-if Settings["covers-directory"] == "": Settings["covers-directory"] = "Covers"
-Settings["covers-directory"] = Settings["covers-directory"].replace("\\", "/").rstrip("/")
-if Settings["titles-directory"] == "": Settings["titles-directory"] = "Titles"
-Settings["titles-directory"] = Settings["titles-directory"].replace("\\", "/").rstrip("/")
+		return self.__Title["site"]
 
-# Запись в лог сообщения: статус режима использования ID вместо алиаса.
-logging.info("Using ID instead slug: " + ("ON." if Settings["use-id-instead-slug"] == True else "OFF."))
+	@property
+	def id(self) -> int:
+		"""Целочисленный идентификатор."""
 
-#==========================================================================================#
-# >>>>> НАСТРОЙКА ОБРАБОТЧИКА КОМАНД <<<<< #
-#==========================================================================================#
+		return self.__Title["id"]
 
-# Список описаний обрабатываемых команд.
-CommandsList = list()
+	@property
+	def slug(self) -> str:
+		"""Алиас."""
 
-# Создание команды: build.
-COM_build = Command("build")
-COM_build.add_argument(ArgumentsTypes.All, important = True)
-COM_build.add_flag_position(["cbz"])
-COM_build.add_flag_position(["no-filters"])
-COM_build.add_flag_position(["no-delay"])
-COM_build.add_key_position(["branch", "chapter", "volume"], ArgumentsTypes.All)
-COM_build.add_flag_position(["s"])
-CommandsList.append(COM_build)
+		return self.__Title["slug"]
 
-# Создание команды: getcov.
-COM_getcov = Command("getcov")
-COM_getcov.add_argument(ArgumentsTypes.All, important = True)
-COM_getcov.add_flag_position(["f"])
-COM_getcov.add_flag_position(["s"])
-CommandsList.append(COM_getcov)
+	@property
+	def ru_name(self) -> str | None:
+		"""Название на русском."""
 
-# Создание команды: parse.
-COM_parse = Command("parse")
-COM_parse.add_argument(ArgumentsTypes.All, important = True, layout_index = 1)
-COM_parse.add_flag_position(["collection", "local"], important = True, layout_index = 1)
-COM_parse.add_flag_position(["h", "y"])
-COM_parse.add_flag_position(["f"])
-COM_parse.add_flag_position(["s"])
-COM_parse.add_key_position(["from"], ArgumentsTypes.All)
-CommandsList.append(COM_parse)
+		return self.__Title["ru_name"]
 
-# Создание команды: repair.
-COM_repair = Command("repair")
-COM_repair.add_argument(ArgumentsTypes.All, important = True)
-COM_repair.add_key_position(["chapter"], ArgumentsTypes.Number, important = True)
-COM_repair.add_flag_position(["h", "y"])
-COM_repair.add_flag_position(["s"])
-CommandsList.append(COM_repair)
+	@property
+	def en_name(self) -> str | None:
+		"""Название на английском."""
 
-# Создание команды: update.
-COM_update = Command("update")
-COM_update.add_flag_position(["onlydesc"])
-COM_update.add_flag_position(["h", "y"])
-COM_update.add_flag_position(["f"])
-COM_update.add_flag_position(["s"])
-COM_update.add_key_position(["from"], ArgumentsTypes.All)
-CommandsList.append(COM_update)
+		return self.__Title["en_name"]
 
-# Инициализация обработчика консольных аргументов.
-CAC = Terminalyzer()
-# Получение информации о проверке команд.
-CommandDataStruct = CAC.check_commands(CommandsList)
+	@property
+	def another_names(self) -> list[str]:
+		"""Список альтернативных названий."""
 
-# Если не удалось определить команду.
-if CommandDataStruct == None:
-	# Запись в лог критической ошибки: неверная команда.
-	logging.critical("Unknown command.")
-	# Завершение работы скрипта с кодом ошибки.
-	exit(1)
-	
-#==========================================================================================#
-# >>>>> ОБРАБОТКА СПЕЦИАЛЬНЫХ ФЛАГОВ <<<<< #
-#==========================================================================================#
+		return self.__Title["another_names"]
 
-# Активна ли опция выключения компьютера по завершении работы парсера.
-IsShutdowAfterEnd = False
-# Сообщение для внутренних функций: выключение ПК.
-InFuncMessage_Shutdown = ""
-# Активен ли режим перезаписи при парсинге.
-IsForceModeActivated = False
-# Сообщение для внутренних функций: режим перезаписи.
-InFuncMessage_ForceMode = ""
-# Выбранный домен.
-Domain = "mangalib.me"
+	@property
+	def covers(self) -> list[dict]:
+		"""Список описаний обложки."""
 
-# Обработка флага: режим перезаписи.
-if "f" in CommandDataStruct.flags and CommandDataStruct.name not in ["repair"]:
-	# Включение режима перезаписи.
-	IsForceModeActivated = True
-	# Запись в лог сообщения: включён режим перезаписи.
-	logging.info("Force mode: ON.")
-	# Установка сообщения для внутренних функций.
-	InFuncMessage_ForceMode = "Force mode: ON\n"
+		return self.__Title["covers"]
 
-else:
-	# Запись в лог сообщения об отключённом режиме перезаписи.
-	logging.info("Force mode: OFF.")
-	# Установка сообщения для внутренних функций.
-	InFuncMessage_ForceMode = "Force mode: OFF\n"
-	
-# Обработка флага: парсинг хентая.
-if "h" in CommandDataStruct.flags:
-	# Изменение домена.
-	Domain = "hentailib.me"
-	
-# Обработка флага: парсинг яоя.
-if "y" in CommandDataStruct.flags:
-	# Изменение домена.
-	Domain = "yaoilib.me"
-	
-# Сообщение для внутренних функций: домен.
-InFuncMessage_Domain = f"Domain: {Domain}\n"
-# Запись в лог сообщения: выбранный домен.
-logging.info(f"Domain: \"{Domain}\".")
+	@property
+	def authors(self) -> list[str]:
+		"""Список авторов."""
 
-# Обработка флага: выключение ПК после завершения работы скрипта.
-if "s" in CommandDataStruct.flags:
-	# Включение режима.
-	IsShutdowAfterEnd = True
-	# Запись в лог сообщения о том, что ПК будет выключен после завершения работы.
-	logging.info("Computer will be turned off after the script is finished!")
-	# Установка сообщения для внутренних функций.
-	InFuncMessage_Shutdown = "Computer will be turned off after the script is finished!\n"
+		return self.__Title["authors"]
 
-#==========================================================================================#
-# >>>>> ИНИЦИАЛИЗАЦИЯ МЕНЕДЖЕРА ЗАПРОСОВ <<<<< #
-#==========================================================================================#
+	@property
+	def publication_year(self) -> int | None:
+		"""Год публикации."""
 
-# Конфигурация менеджера запросов.
-Config = WebConfig()
-Config.select_lib(WebLibs.curl_cffi)
-Config.generate_user_agent("pc")
-Config.curl_cffi.enable_http2(True)
-# Инициализация менеджера запросов.
-Requestor = WebRequestor(Config)
-# Установка прокси.
-if Settings["proxy"]["enable"] == True: Requestor.add_proxy(
-	Protocols.HTTPS,
-	host = Settings["proxy"]["host"],
-	port = Settings["proxy"]["port"],
-	login = Settings["proxy"]["login"],
-	password = Settings["proxy"]["password"]
-)
+		return self.__Title["publication_year"]
 
-#==========================================================================================#
-# >>>>> ОБРАБОТКА КОММАНД <<<<< #
-#==========================================================================================#
+	@property
+	def description(self) -> str | None:
+		"""Описание."""
 
-# Обработка команды: build.
-if "build" == CommandDataStruct.name:
-	# Запись в лог сообщения: построение тайтла.
-	logging.info("====== Building ======")	
-	# Инициализация билдера.
-	BuilderObject = Builder(Settings, CommandDataStruct.arguments[0], InFuncMessage_Shutdown)
-	# Если задан флаг, изменить выходной формат на *.CBZ.
-	if "cbz" in CommandDataStruct.flags: BuilderObject.setOutputFormat("cbz")
-	# Если задан флаг, отключить фильтрацию.
-	if "no-filters" in CommandDataStruct.flags: BuilderObject.setFilterStatus(False)
-	# Если задан флаг, отключить интервал.
-	if "no-delay" in CommandDataStruct.flags: BuilderObject.setDelayStatus(False)
-	
-	# Если ключом указан ID главы для сборки.
-	if "chapter" in CommandDataStruct.keys:
-		# Построение главы.
-		BuilderObject.buildChapter(int(CommandDataStruct.values["chapter"]))
-	
-	# Если ключом указан номер тома для сборки.
-	elif "volume" in CommandDataStruct.keys:
-		# Построение тома.
-		BuilderObject.buildVolume(None, CommandDataStruct.values["volume"])
-	
-	# Если ключом указан номер ветви для сборки.
-	elif "branch" in CommandDataStruct.keys:
-		# Построение ветви.
-		BuilderObject.buildBranch(CommandDataStruct.values["branch"])
-	
-	else:
-		# Построение всего тайтла.
-		BuilderObject.buildBranch()
+		return self.__Title["description"]
 
-# Обработка команды: getcov.
-if "getcov" == CommandDataStruct.name:
-	# Запись в лог сообщения: заголовок парсинга.
-	logging.info("====== Parsing ======")
-	# Парсинг тайтла (без глав).
-	LocalTitle = Parser(Settings, Requestor, CommandDataStruct.arguments[0], Domain, force_mode = IsForceModeActivated, message = InFuncMessage_Shutdown + InFuncMessage_ForceMode + InFuncMessage_Domain, Amending = False)
-	# Сохранение локальных файлов тайтла.
-	LocalTitle.downloadCover()
+	@property
+	def age_limit(self) -> int | None:
+		"""Возрастное ограничение."""
 
-# Обработка команды: parse.
-if "parse" == CommandDataStruct.name:
-	# Запись в лог сообщения: заголовок парсинга.
-	logging.info("====== Parsing ======")
-	# Список тайтлов для парсинга.
-	TitlesList = list()
-	# Индекс стартового алиаса.
-	StartSlugIndex = 0
-	
-	# Если активирован флаг парсинга коллекций.
-	if "collection" in CommandDataStruct.flags:
+		return self.__Title["age_limit"]
+
+	@property
+	def genres(self) -> list[str]:
+		"""Список жанров."""
+
+		return self.__Title["genres"]
+
+	@property
+	def tags(self) -> list[str]:
+		"""Список тегов."""
+
+		return self.__Title["tags"]
+
+	@property
+	def franchises(self) -> list[str]:
+		"""Список франшиз."""
+
+		return self.__Title["franchises"]
+
+	@property
+	def type(self) -> Types | None:
+		"""Тип тайтла."""
+
+		return self.__Title["type"]
+
+	@property
+	def status(self) -> Statuses | None:
+		"""Статус тайтла."""
+
+		return self.__Title["status"]
+
+	@property
+	def is_licensed(self) -> bool | None:
+		"""Состояние: лицензирован ли тайтл на данном ресурсе."""
+
+		return self.__Title["is_licensed"]
+
+	@property
+	def content(self) -> dict:
+		"""Содержимое тайтла."""
+
+		return self.__Title["content"]
+
+	#==========================================================================================#
+	# >>>>> СТАНДАРТНЫЕ ПРИВАТНЫЕ МЕТОДЫ <<<<< #
+	#==========================================================================================#
+
+	def __CalculateEmptyChapters(self, content: dict) -> int:
+		"""Подсчитывает количество глав без слайдов."""
+
+		# Количество глав.
+		ChaptersCount = 0
+
+		# Для каждой ветви.
+		for BranchID in content.keys():
+
+			# Для каждой главы.
+			for Chapter in content[BranchID]:
+				# Если глава не содержит слайдов, подсчитать её.
+				if not Chapter["slides"]: ChaptersCount += 1
+
+		return ChaptersCount
+
+	def __InitializeRequestor(self) -> WebRequestor:
+		"""Инициализирует модуль WEB-запросов."""
+
+		# Инициализация и настройка объекта.
+		Config = WebConfig()
+		Config.select_lib(WebLibs.curl_cffi)
+		Config.generate_user_agent("pc")
+		Config.curl_cffi.enable_http2(True)
+		Config.set_header("Authorization", self.__Settings["custom"]["token"])
+		WebRequestorObject = WebRequestor(Config)
+		# Установка прокси.
+		if self.__Settings["proxy"]["enable"]: WebRequestorObject.add_proxy(
+			Protocols.HTTPS,
+			host = self.__Settings["proxy"]["host"],
+			port = self.__Settings["proxy"]["port"],
+			login = self.__Settings["proxy"]["login"],
+			password = self.__Settings["proxy"]["password"]
+		)
+
+		return WebRequestorObject
+
+	#==========================================================================================#
+	# >>>>> ПРИВАТНЫЕ МЕТОДЫ <<<<< #
+	#==========================================================================================#
+
+	def __GetAgeLimit(self, data: dict) -> int:
+		"""
+		Получает возрастной рейтинг.
+			data – словарь данных тайтла.
+		"""
+
+		# Возрастной рейтинг.
+		Rating = None
+		# Строковое представление.
+		RatingString = data["ageRestriction"]["label"].split(" ")[0].replace("+", "").replace("Нет", "")
+		# Если строковое представление состоит из цифр, конвертировать в число.
+		if RatingString.isdigit(): Rating = int(RatingString)
+
+		return Rating 
+
+	def __GetAuthors(self, data: dict) -> list[str]:
+		"""Получает список авторов."""
+
+		# Список авторов.
+		Authors = list()
+		# Для каждого автора записать имя.
+		for Author in data["authors"]: Authors.append(Author["name"])
+
+		return Authors
+
+	def __GetContent(self) -> dict:
+		"""Получает содержимое тайтла."""
+
+		# Структура содержимого.
+		Content = dict()
+		# Запрос содержимого.
+		Response = self.__Requestor.get(f"https://api.lib.social/api/manga/{self.__Slug}/chapters")
 		
-		# Если существует файл коллекции.
-		if os.path.exists("Collection.txt"):
-			
-			# Чтение содржимого файла.
-			with open("Collection.txt", "r") as FileReader:
-				# Буфер чтения.
-				Bufer = FileReader.read().split("\n")
-				
-				# Поместить алиасы в список на парсинг, если строка не пуста.
-				for Slug in Bufer:
-					if Slug.strip() != "":
-						TitlesList.append(Slug.strip())
+		# Если запрос успешен.
+		if Response.status_code == 200:
+			# Парсинг данных в JSON.
+			Data = Response.json["data"]
+			# Выжидание интервала.
+			sleep(self.__Settings["common"]["delay"])
 
-			# Запись в лог сообщения: количество тайтлов в коллекции.
-			logging.info("Titles count in collection: " + str(len(TitlesList)) + ".")
-				
+			# Для каждой главы.
+			for Chapter in Data:
+
+				# Для каждой ветви.
+				for BranchData in Chapter["branches"]:
+					# ID ветви.
+					BranchID = str(BranchData["branch_id"])
+					# Если ветвь не определена, синтезировать новую добавлением нуля к ID тайтла.
+					if BranchID == "None": BranchID = str(self.__Title["id"]) + "0"
+					# Если ветвь не существует, создать её.
+					if BranchID not in Content.keys(): Content[BranchID] = list()
+					# Переводчики.
+					Translators = [sub["name"] for sub in BranchData["teams"]]
+					# Буфер главы.
+					Buffer = {
+						"id": BranchData["id"],
+						"volume": Chapter["volume"],
+						"number": Chapter["number"],
+						"name": Zerotify(Chapter["name"]),
+						"is_paid": False,
+						"translators": Translators,
+						"slides": []	
+					}
+					# Запись главы.
+					Content[BranchID].append(Buffer)
+
 		else:
-			# Запись в лог критической ошибки: отсутствует файл коллекций.
-			logging.critical("Unable to find collection file.")
-			# Выброс исключения.
-			raise FileNotFoundError("Collection.txt")
+			# Запись в лог ошибки.
+			self.__SystemObjects.logger.request_error(Response, "Unable to request chapter.")
+
+		return Content
+
+	def __GetCovers(self, data: dict) -> list[str]:
+		"""Получает список обложек."""
+
+		# Список обложек.
+		Covers = list()
+
+		# Если обложка присутствует.
+		if data["cover"]:
+			# Дополнение структуры.
+			Covers.append({
+				"link": data["cover"]["default"],
+				"filename": data["cover"]["default"].split("/")[-1]
+			})
+
+		# Если включен режим получения размеров обложек.
+		if self.__Settings["common"]["sizing_images"]:
+			# Дополнение структуры размерами.
+			Covers[0]["width"] = None
+			Covers[0]["height"] = None
+
+		return Covers
+
+	def __GetDescription(self, data: dict) -> str | None:
+		"""
+		Получает описание.
+			data – словарь данных тайтла.
+		"""
+
+		# Описание.
+		Description = None
+		# Если присутствует описание, записать его и отформатировать.
+		if "summary" in data.keys(): Description = RemoveRecurringSubstrings(data["summary"], "\n").strip().replace(" \n", "\n")
+		# Обнуление пустого описания.
+		Description = Zerotify(Description)
+
+		return Description
+
+	def __GetFranchises(self, data: dict) -> list[str]:
+		"""
+		Получает список серий.
+			data – словарь данных тайтла.
+		"""
+
+		# Франшизы.
+		Franchises = list()
+		# Для каждой франшизы записать название.
+		for Franchise in data["franchise"]: Franchises.append(Franchise["name"])
+		# Удаление оригинальных работ.
+		if "Оригинальные работы" in Franchises: Franchises.remove("Оригинальные работы")
+
+		return Franchises
+
+	def __GetGenres(self, data: dict) -> list[str]:
+		"""
+		Получает список жанров.
+			data – словарь данных тайтла.
+		"""
+
+		# Описание.
+		Genres = list()
+		# Для каждого жанра записать имя.
+		for Genre in data["genres"]: Genres.append(Genre["name"])
+
+		return Genres
+
+	def __GetSiteID(self) -> int:
+		"""Возвращает целочисленный идентификатор сайта."""
+
+		# ID сайта.
+		SiteID = None
+		# Проверка соответствий.
+		if "mangalib" in SITE: SiteID = 1
+		if "yaoilib" in SITE or "slashlib" in SITE: SiteID = 2
+		if "hentailib" in SITE: SiteID = 4
 		
-	# Если активирован флаг обновления локальных файлов.
-	elif "local" in CommandDataStruct.flags:
-		# Вывод в консоль: идёт поиск тайтлов.
-		print("Scanning titles...")
-		# Получение списка файлов в директории.
-		TitlesSlugs = os.listdir(Settings["titles-directory"])
-		# Фильтрация только файлов формата JSON.
-		TitlesSlugs = list(filter(lambda x: x.endswith(".json"), TitlesSlugs))
-			
-		# Чтение всех алиасов из локальных файлов.
-		for File in TitlesSlugs:
-			# JSON файл тайтла.
-			LocalTitle = ReadJSON(Settings["titles-directory"] + "/" + File)
-			# Помещение алиаса в список.
-			TitlesList.append(str(LocalTitle["slug"]) if "slug" in LocalTitle.keys() else str(LocalTitle["dir"]))
+		return SiteID
 
-		# Запись в лог сообщения: количество доступных для парсинга тайтлов.
-		logging.info("Local titles to parsing: " + str(len(TitlesList)) + ".")
+	def __GetServer(self) -> str:
+		"""Возвращает домен сервера хранения изображений."""
 
-	else:
-		# Добавление аргумента в очередь парсинга.
-		TitlesList.append(CommandDataStruct.arguments[0])
+		# Сервер.
+		Server = ""
+		# ID текущего сервера.
+		CurrentServerID = 4
+		# Адрес запроса.
+		URL = f"https://api.lib.social/api/constants?fields[]=imageServers"
+		# Заголовки запроса.
+		Headers = {
+			"Authorization": self.__Settings["custom"]["token"],
+			"Referer": f"https://{SITE}/"
+		}
+		# Запрос серверных констант.
+		Response = self.__Requestor.get(URL, headers = Headers)
 
-	# Если указан алиас, с которого необходимо начать.
-	if "from" in CommandDataStruct.keys:
-		
-		# Если алиас присутствует в списке.
-		if CommandDataStruct.values["from"] in TitlesList:
-			# Запись в лог сообщения: парсинг коллекции начнётся с алиаса.
-			logging.info("Parcing will be started from \"" + CommandDataStruct.values["from"] + "\".")
-			# Задать стартовый индекс, равный индексу алиаса в коллекции.
-			StartSlugIndex = TitlesList.index(CommandDataStruct.values["from"])
-			
+		# Если запрос успешен.
+		if Response.status_code == 200:
+			# Парсинг данных в JSON.
+			Data = Response.json["data"]["imageServers"]
+			# Выжидание интервала.
+			sleep(self.__Settings["common"]["delay"])
+
+			# Для каждого сервера.
+			for ServerData in Data:
+				# Если сервер поддерживает текущий домен, записать его URL.
+				if ServerData["id"] == self.__Settings["custom"]["server"] and CurrentServerID in ServerData["site_ids"]: Server = ServerData["url"]
+
 		else:
-			# Запись в лог предупреждения: стартовый алиас не найден.
-			logging.warning("Unable to find start slug in \"Collection.txt\". All titles skipped.")
-			# Задать стартовый индекс, равный количеству алиасов.
-			StartSlugIndex = len(TitlesList)
+			# Запись в лог ошибки.
+			self.__SystemObjects.logger.request_error(Response, "Unable to request site constants.")
+
+		return Server
+
+	def __GetSlides(self, number: str, volume: str, branch_id: str) -> list[dict]:
+		"""
+		Получает данные о слайдах главы.
+			number – номер главы;
+			volume – номер тома;
+			branch_id – ID ветви.
+		"""
+
+		# Список слайдов.
+		Slides = list()
+		# Получение домена сервера хранения слайдов.
+		Server = self.__GetServer()
+		# Модификатор запроса ветви.
+		Branch = "" if branch_id == str(self.__Title["id"]) + "0" else f"&branch_id={branch_id}"
+		# Адрес запроса.
+		URL = f"https://api.lib.social/api/manga/{self.__Slug}/chapter?number={number}&volume={volume}{Branch}"
+		# Заголовки запроса.
+		Headers = {
+			"Authorization": self.__Settings["custom"]["token"],
+			"Referer": f"https://{SITE}/"
+		}
+		# Запрос слайдов.
+		Response = self.__Requestor.get(URL, headers = Headers)
+
+		# Если запрос успешен.
+		if Response.status_code == 200:
+			# Парсинг данных в JSON.
+			Data = Response.json["data"]["pages"]
+			# Выжидание интервала.
+			sleep(self.__Settings["common"]["delay"])
+
+			# Для каждого слайда.
+			for SlideIndex in range(len(Data)):
+				# Буфер слайда.
+				Buffer = {
+					"index": SlideIndex + 1,
+					"link": Server + Data[SlideIndex]["url"].replace(" ", "%20")
+				}
+
+				# Если включен режим получения размеров обложек.
+				if self.__Settings["common"]["sizing_images"]:
+					# Дополнение структуры размерами.
+					Buffer["width"] = Data[SlideIndex]["width"]
+					Buffer["height"] = Data[SlideIndex]["height"]
+
+				# Запись слайда. 
+				Slides.append(Buffer)
+
+		else:
+			# Запись в лог ошибки.
+			self.__SystemObjects.logger.request_error(Response, "Unable to request chapter content.")
+
+		return Slides
+
+	def __GetStatus(self, data: dict) -> str:
+		"""
+		Получает статус.
+			data – словарь данных тайтла.
+		"""
+
+		# Статус тайтла.
+		Status = None
+		# Статусы тайтлов.
+		StatusesDetermination = {
+			1: Statuses.ongoing,
+			2: Statuses.completed,
+			3: Statuses.announced,
+			4: Statuses.dropped,
+			5: Statuses.dropped
+		}
+		# Индекс статуса на сайте.
+		SiteStatusIndex = data["status"]["id"]
+		# Если индекс статуса валиден, преобразовать его в поддерживаемый статус.
+		if SiteStatusIndex in StatusesDetermination.keys(): Status = StatusesDetermination[SiteStatusIndex]
+
+		return Status
+
+	def __GetTitleData(self) -> dict | None:
+		"""
+		Получает данные тайтла.
+			slug – алиас.
+		"""
+
+		# Адрес запроса.
+		URL = f"https://api.lib.social/api/manga/{self.__Slug}?fields[]=eng_name&fields[]=otherNames&fields[]=summary&fields[]=releaseDate&fields[]=type_id&fields[]=caution&fields[]=genres&fields[]=tags&fields[]=franchise&fields[]=authors&fields[]=manga_status_id&fields[]=status_id"
+		# Заголовки запроса.
+		Headers = {
+			"Authorization": self.__Settings["custom"]["token"],
+			"Referer": f"https://{SITE}/"
+		}
+		# Выполнение запроса.
+		Response = self.__Requestor.get(URL, headers = Headers)
+
+		# Если запрос успешен.
+		if Response.status_code == 200:
+			# Парсинг ответа.
+			Response = Response.json["data"]
+			# Запись в лог информации: начало парсинга.
+			self.__SystemObjects.logger.parsing_start(self.__Slug, Response["id"])
+			# Выжидание интервала.
+			sleep(self.__Settings["common"]["delay"])
+
+		else:
+			# Запись в лог ошибки.
+			self.__SystemObjects.logger.request_error(Response, "Unable to request title data.")
+			# Обнуление ответа.
+			Response = None
+
+		return Response
+
+	def __GetTags(self, data: dict) -> list[str]:
+		"""
+		Получает список тегов.
+			data – словарь данных тайтла.
+		"""
+
+		# Описание.
+		Tags = list()
+		# Для каждого тега записать имя.
+		for Tag in data["tags"]: Tags.append(Tag["name"])
+
+		return Tags
+
+	def __GetType(self, data: dict) -> str:
+		"""
+		Получает тип тайтла.
+			data – словарь данных тайтла.
+		"""
+
+		# Тип тайтла.
+		Type = None
+		# Типы тайтлов.
+		TypesDeterminations = {
+			"Манга": Types.manga,
+			"Манхва": Types.manhwa,
+			"Маньхуа": Types.manhua,
+			"Руманга": Types.russian_comic,
+			"Комикс западный": Types.western_comic,
+			"OEL-манга": Types.oel
+		}
+		# Определение с сайта.
+		SiteType = data["type"]["label"]
+		# Если определение с сайта валидно, преобразовать его.
+		if SiteType in TypesDeterminations.keys(): Type = TypesDeterminations[SiteType]
+
+		return Type
+
+	def __StringToDate(self, date_str: str) -> datetime:
+		"""
+		Преобразует строковое время в объектную реализацию.
+			date_str – строковая интерпретация.
+		"""
+
+		# Шаблон строки.
+		DatePattern = "%Y-%m-%dT%H:%M:%S.%fZ"
+
+		return datetime.strptime(date_str, DatePattern)
+
+	#==========================================================================================#
+	# >>>>> ПУБЛИЧНЫЕ МЕТОДЫ <<<<< #
+	#==========================================================================================#
+
+	def __init__(self, system_objects: Objects):
+		"""
+		Модульный парсер.
+			system_objects – коллекция системных объектов.
+		"""
+
+		#---> Генерация динамических свойств.
+		#==========================================================================================#
+		# Настройки парсера.
+		self.__Settings = ReadJSON(f"Parsers/{NAME}/settings.json")
+		# Менеджер WEB-запросов.
+		self.__Requestor = self.__InitializeRequestor()
+		# Структура данных.
+		self.__Title = None
+		# Алиас тайтла.
+		self.__Slug = None
+		# Коллекция системных объектов.
+		self.__SystemObjects = system_objects
+
+		# Выбор парсера для системы логгирования.
+		self.__SystemObjects.logger.select_parser(NAME)
+
+	def amend(self, content: dict | None = None, message: str = "") -> dict:
+		"""
+		Дополняет каждую главу в кажой ветви информацией о содержимом.
+			content – содержимое тайтла для дополнения;
+			message – сообщение для портов CLI.
+		"""
+
+		# Если содержимое не указано, использовать текущее.
+		if content == None: content = self.content
+		# Подсчёт количества глав для дополнения.
+		ChaptersToAmendCount = self.__CalculateEmptyChapters(content)
+		# Количество дополненных глав.
+		AmendedChaptersCount = 0
+		# Индекс прогресса.
+		ProgressIndex = 0
+
+		# Для каждой ветви.
+		for BranchID in content.keys():
 			
-	# Спарсить каждый тайтл из списка.
-	for Index in range(StartSlugIndex, len(TitlesList)):
-		# Часть сообщения о прогрессе.
-		InFuncMessage_Progress = "Parcing titles: " + str(Index + 1) + " / " + str(len(TitlesList)) + "\n"
-		# Генерация сообщения.
-		ExternalMessage = InFuncMessage_Shutdown + InFuncMessage_ForceMode + InFuncMessage_Domain + InFuncMessage_Progress if len(TitlesList) > 1 else InFuncMessage_Shutdown + InFuncMessage_ForceMode + InFuncMessage_Domain
-		# Парсинг тайтла.
-		LocalTitle = Parser(Settings, Requestor, TitlesList[Index], Domain, force_mode = IsForceModeActivated, message = ExternalMessage)
-		# Загрузка обложки тайтла.
-		#LocalTitle.download_covers()
-		# Сохранение локальных файлов тайтла.
-		LocalTitle.save()
-		# Выжидание интервала.
-		time.sleep(Settings["delay"])
-		
-# Обработка команды: repair.
-if "repair" == CommandDataStruct.name:
-	# Запись в лог сообщения: восстановление.
-	logging.info("====== Repairing ======")
-	# Название файла тайтла с расширением.
-	Filename = (CommandDataStruct.arguments[0] + ".json") if ".json" not in CommandDataStruct.arguments[0] else CommandDataStruct.arguments[0]
-	# Чтение тайтла.
-	TitleContent = ReadJSON(Settings["titles-directory"] + "/" + Filename)
-	# Генерация сообщения.
-	ExternalMessage = InFuncMessage_Shutdown
-	# Вывод в консоль: идёт процесс восстановления главы.
-	print("Repairing chapter...")
-	# Алиас тайтла.
-	TitleSlug = TitleContent["slug"]
-	# Парсинг тайтла.
-	LocalTitle = Parser(Settings, Requestor, TitleSlug, Domain, force_mode = False, message = ExternalMessage, amending = False)
-	# Восстановление главы.
-	LocalTitle.repair_chapter(CommandDataStruct.values["chapter"])
-	# Сохранение локальных файлов тайтла.
-	LocalTitle.save()
-	
-# Обработка команды: update.
-if "update" == CommandDataStruct.name:
-	# Запись в лог сообщения: получение списка обновлений.
-	logging.info("====== Updating ======")
-	# Индекс стартового алиаса.
-	StartIndex = 0
-	# Инициализация проверки обновлений.
-	UpdateChecker = Updater(Settings, Requestor, Domain)
-	# Получение списка обновлённых тайтлов.
-	TitlesList = UpdateChecker.getUpdatesList()
-		
-	# Если указан стартовый тайтл.
-	if "from" in CommandDataStruct.keys:
-		# Запись в лог сообщения: стартовый тайтл обновления.
-		logging.info("Updating starts from title with slug: \"" + CommandDataStruct.values["from"] + "\".")
+			# Для каждый главы.
+			for ChapterIndex in range(0, len(content[BranchID])):
 				
-		# Если стартовый алиас найден.
-		if CommandDataStruct.values["from"] in TitlesList:
-			# Указать индекс алиаса в качестве стартового.
-			StartIndex = TitlesList.index(CommandDataStruct.values["from"])
+				# Если слайды не описаны или включён режим перезаписи.
+				if content[BranchID][ChapterIndex]["slides"] == []:
+					# Инкремент прогресса.
+					ProgressIndex += 1
+					# Получение списка слайдов главы.
+					Slides = self.__GetSlides(
+						content[BranchID][ChapterIndex]["number"],
+						content[BranchID][ChapterIndex]["volume"],
+						BranchID
+					)
+
+					# Если получены слайды.
+					if Slides:
+						# Инкремент количества дополненных глав.
+						AmendedChaptersCount += 1
+						# Запись информации о слайде.
+						content[BranchID][ChapterIndex]["slides"] = Slides
+						# Запись в лог информации: глава дополнена.
+						self.__SystemObjects.logger.chapter_amended(self.__Slug, self.__Title["id"], content[BranchID][ChapterIndex]["id"], False)
+
+					# Вывод в консоль: прогресс дополнения.
+					PrintAmendingProgress(message, ProgressIndex, ChaptersToAmendCount)
+					# Выжидание интервала.
+					sleep(self.__Settings["common"]["delay"])
+
+		# Запись в лог информации: количество дополненных глав.
+		self.__SystemObjects.logger.amending_end(self.__Slug, self.__Title["id"], AmendedChaptersCount)
+
+		return content
+
+	def get_updates(self, hours: int) -> list[str]:
+		"""
+		Возвращает список алиасов тайтлов, обновлённых на сервере за указанный период времени.
+			hours – количество часов, составляющих период для получения обновлений.
+		"""
+
+		# Список алиасов.
+		Updates = list()
+		# Промежуток времени для проверки обновлений (в секундах).
+		UpdatesPeriod = hours * 3600
+		# Состояние: достигнут ли конец проверяемого диапазона.
+		IsUpdatePeriodOut = False
+		# Счётчик страницы.
+		Page = 1
+		# Количество обновлённых тайтлов.
+		UpdatesCount = 0
+		# Заголовки.
+		Headers = {
+			"Site-Id": str(self.__GetSiteID())
+		}
+		# Текущая дата.
+		CurrentDate = datetime.utcnow()
+
+		# Проверка обновлений за указанный промежуток времени.
+		while not IsUpdatePeriodOut:
+			# Выполнение запроса.
+			Response = self.__Requestor.get(f"https://api.lib.social/api/latest-updates?page={Page}", headers = Headers)
 			
-		else:
-			# Запись в лог предупреждения: стартовый алиас не найден.
-			logging.warning("Unable to find start slug. All titles skipped.")
-			# Пропустить все тайтлы.
-			StartIndex = len(TitlesList)
+			# Если запрос успешен.
+			if Response.status_code == 200:
+				# Парсинг ответа.
+				UpdatesPage = Response.json["data"]
+
+				# Для каждой записи об обновлении.
+				for UpdateNote in UpdatesPage:
+					# Вычисление временной разницы между текущим моментом и временем публикации.
+					Delta = CurrentDate - self.__StringToDate(UpdateNote["last_item_at"])
+					
+					# Если запись не выходит за пределы интервала.
+					if Delta.total_seconds() / 3600 <= hours:
+						# Сохранение алиаса обновлённого тайтла.
+						Updates.append(UpdateNote["slug"])
+						# Инкремент обновлённых тайтлов.
+						UpdatesCount += 1
+
+					else:
+						# Завершение цикла обновления.
+						IsUpdatePeriodOut = True
+
+			else:
+				# Завершение цикла обновления.
+				IsUpdatePeriodOut = True
+				# Запись в лог ошибки.
+				self.__SystemObjects.logger.request_error(Response, f"Unable to request updates page {Page}.")
+
+			# Если не все обновления получены.
+			if not IsUpdatePeriodOut:
+				# Инкремент страницы.
+				Page += 1
+				# Выжидание указанного интервала.
+				sleep(self.__Settings["common"]["delay"])
+
+		# Запись в лог информации: количество собранных обновлений.
+		self.__SystemObjects.logger.updates_collected(len(Updates))
+
+		return Updates
+
+	def parse(self, slug: str, message: str = ""):
+		"""
+		Получает основные данные тайтла.
+			slug – алиас тайтла, использующийся для идентификации оного в адресе;
+			message – сообщение для портов CLI.
+		"""
+
+		# Заполнение базовых данных.
+		self.__Title = BaseStructs().manga
+		self.__Slug = slug
+		# Вывод в консоль: статус парсинга.
+		PrintParsingStatus(message)
+		# Получение описания.
+		Data = self.__GetTitleData()
+		# Занесение данных.
+		self.__Title["site"] = SITE.replace("test-front.", "")
+		self.__Title["id"] = Data["id"]
+		self.__Title["slug"] = slug
+		self.__Title["ru_name"] = Data["rus_name"]
+		self.__Title["en_name"] = Data["eng_name"]
+		self.__Title["another_names"] = Data["otherNames"]
+		self.__Title["covers"] = self.__GetCovers(Data)
+		self.__Title["authors"] = self.__GetAuthors(Data)
+		self.__Title["publication_year"] = int(Data["releaseDate"]) if Data["releaseDate"] else None
+		self.__Title["description"] = self.__GetDescription(Data)
+		self.__Title["age_limit"] = self.__GetAgeLimit(Data)
+		self.__Title["type"] = self.__GetType(Data)
+		self.__Title["status"] = self.__GetStatus(Data)
+		self.__Title["is_licensed"] = Data["is_licensed"]
+		self.__Title["genres"] = self.__GetGenres(Data)
+		self.__Title["tags"] = self.__GetTags(Data)
+		self.__Title["franchises"] = self.__GetFranchises(Data)
+		self.__Title["content"] = self.__GetContent()
+
+	def repair(self, content: dict, chapter_id: int) -> dict:
+		"""
+		Заново получает данные слайдов главы главы.
+			content – содержимое тайтла;
+			chapter_id – идентификатор главы.
+		"""
+
+		# Для каждой ветви.
+		for BranchID in content.keys():
 			
-	# Запись в лог сообщения: заголовок парсинга.
-	logging.info("====== Parsing ======")
-	
-	# Парсинг обновлённых тайтлов.
-	for Index in range(StartIndex, len(TitlesList)):
-		# Очистка терминала.
-		Cls()
-		# Вывод в терминал прогресса.
-		print("Updating titles: " + str(Index + 1) + " / " + str(len(TitlesList)))
-		# Генерация сообщения.
-		ExternalMessage = InFuncMessage_Shutdown + InFuncMessage_ForceMode + InFuncMessage_Domain + "Updating titles: " + str(Index + 1) + " / " + str(len(TitlesList)) + "\n"
-		# Локальный описательный файл.
-		LocalTitle = None
-			
-		# Если включено обновление только описания.
-		if "onlydesc" in CommandDataStruct.flags:
-			# Парсинг тайтла (без глав).
-			LocalTitle = Parser(Settings, Requestor, TitlesList[Index], Domain, force_mode = IsForceModeActivated, message = ExternalMessage, amending = False)
+			# Для каждый главы.
+			for ChapterIndex in range(len(content[BranchID])):
 				
-		else:
-			# Парсинг тайтла.
-			LocalTitle = Parser(Settings, Requestor, TitlesList[Index], Domain, force_mode = IsForceModeActivated, message = ExternalMessage)
-			# Загрузка обложки тайтла.
-			LocalTitle.downloadCover()
-			
-		# Сохранение локальных файлов тайтла.
-		LocalTitle.save()
-		# Выжидание указанного интервала, если не все тайтлы обновлены.
-		if Index < len(TitlesList): time.sleep(Settings["delay"])
+				# Если ID совпадает с искомым.
+				if content[BranchID][ChapterIndex]["id"] == chapter_id:
+					# Получение списка слайдов главы.
+					Slides = self.__GetSlides(
+						content[BranchID][ChapterIndex]["number"],
+						content[BranchID][ChapterIndex]["volume"],
+						BranchID
+					)
+					# Запись в лог информации: глава восстановлена.
+					self.__SystemObjects.logger.chapter_repaired(self.__Slug, self.__Title["id"], chapter_id, content[BranchID][ChapterIndex]["is_paid"])
+					# Запись восстановленной главы.
+					content[BranchID][ChapterIndex]["slides"] = Slides
 
-#==========================================================================================#
-# >>>>> ЗАВЕРШЕНИЕ РАБОТЫ СКРИПТА <<<<< #
-#==========================================================================================#
-
-# Закрытие запросчика.
-Requestor.close()
-# Запись в лог сообщения: заголовок завершения работы скрипта.
-logging.info("====== Exiting ======")
-# Очистка консоли.
-Cls()
-# Время завершения работы скрипта.
-EndTime = time.time()
-# Запись времени завершения работы скрипта.
-logging.info("Script finished. Execution time: " + SecondsToTimeString(EndTime - StartTime) + ".")
-
-# Выключение ПК, если установлен соответствующий флаг.
-if IsShutdowAfterEnd == True:
-	# Запись в лог сообщения о немедленном выключении ПК.
-	logging.info("Turning off the computer.")
-	# Выключение ПК.
-	Shutdown()
-
-# Выключение логгирования.
-logging.shutdown()
+		return content
