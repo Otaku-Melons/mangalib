@@ -704,6 +704,8 @@ class Parser:
 		self.__Title["tags"] = self.__GetTags(Data)
 		self.__Title["franchises"] = self.__GetFranchises(Data)
 		self.__Title["content"] = self.__GetContent()
+		# Если главное название нигде не указано, добавить его в список альтернативных.
+		if Data["name"] not in self.__Title["another_names"] and Data["name"] != self.__Title["another_names"] and Data["name"] != self.__Title["another_names"]: self.__Title["another_names"].append(Data["name"])
 
 	def repair(self, content: dict, chapter_id: int) -> dict:
 		"""
