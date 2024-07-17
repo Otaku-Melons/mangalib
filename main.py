@@ -1,14 +1,12 @@
 from Source.Core.Formats.Manga import BaseStructs, Manga, Statuses, Types
 from Source.Core.Objects import Objects
-from Source.Core.Logger import Logger
 from Source.CLI.Templates import *
 
 from dublib.WebRequestor import Protocols, WebConfig, WebLibs, WebRequestor
-from dublib.Methods import ReadJSON, RemoveRecurringSubstrings, Zerotify
+from dublib.Methods.Data import RemoveRecurringSubstrings, Zerotify
+from dublib.Methods.JSON import ReadJSON
 from datetime import datetime
 from time import sleep
-
-import urllib.parse
 
 #==========================================================================================#
 # >>>>> ОПРЕДЕЛЕНИЯ <<<<< #
@@ -164,14 +162,14 @@ class Parser:
 
 		# Инициализация и настройка объекта.
 		Config = WebConfig()
-		Config.select_lib(WebLibs.curl_cffi)
+		Config.select_lib(WebLibs.requests)
 		Config.generate_user_agent("pc")
-		Config.curl_cffi.enable_http2(True)
-		Config.set_header("Authorization", self.__Settings["custom"]["token"])
+		Config.set_tries_count(self.__Settings["common"]["tries"])
+		Config.add_header("Authorization", self.__Settings["custom"]["token"])
 		WebRequestorObject = WebRequestor(Config)
 		# Установка прокси.
 		if self.__Settings["proxy"]["enable"]: WebRequestorObject.add_proxy(
-			Protocols.HTTPS,
+			Protocols.HTTP,
 			host = self.__Settings["proxy"]["host"],
 			port = self.__Settings["proxy"]["port"],
 			login = self.__Settings["proxy"]["login"],
