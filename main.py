@@ -1,4 +1,6 @@
 from Source.Core.Formats.Manga import BaseStructs, Manga, Statuses, Types
+from Source.Core.ParserSettings import ParserSettings
+from Source.Core.Downloader import Downloader
 from Source.Core.Objects import Objects
 from Source.CLI.Templates import *
 
@@ -48,10 +50,16 @@ class Parser:
 		return self.__Title["slug"]
 
 	@property
-	def ru_name(self) -> str | None:
-		"""Название на русском."""
+	def content_language(self) -> str | None:
+		"""Код языка контента по стандарту ISO 639-3."""
 
-		return self.__Title["ru_name"]
+		return self.__Title["content_language"]
+
+	@property
+	def localized_name(self) -> str | None:
+		"""Локализованное название."""
+
+		return self.__Title["localized_name"]
 
 	@property
 	def en_name(self) -> str | None:
@@ -164,22 +172,63 @@ class Parser:
 		Config = WebConfig()
 		Config.select_lib(WebLibs.requests)
 		Config.generate_user_agent("pc")
-		Config.set_tries_count(self.__Settings["common"]["tries"])
-		Config.add_header("Authorization", self.__Settings["custom"]["token"])
+		Config.set_tries_count(self.__Settings.common.tries)
+		Config.add_header("Authorization", self.__Settings.custom["token"])
 		WebRequestorObject = WebRequestor(Config)
+		
 		# Установка прокси.
-		if self.__Settings["proxy"]["enable"]: WebRequestorObject.add_proxy(
+		if self.__Settings.proxy.enable: WebRequestorObject.add_proxy(
 			Protocols.HTTP,
-			host = self.__Settings["proxy"]["host"],
-			port = self.__Settings["proxy"]["port"],
-			login = self.__Settings["proxy"]["login"],
-			password = self.__Settings["proxy"]["password"]
+			host = self.__Settings.proxy.host,
+			port = self.__Settings.proxy.port,
+			login = self.__Settings.proxy.login,
+			password = self.__Settings.proxy.password
 		)
 
 		return WebRequestorObject
 
 	#==========================================================================================#
-	# >>>>> ПРИВАТНЫЕ МЕТОДЫ <<<<< #
+	# >>>>> ПРИВАТНЫЕ МЕТОДЫ ЗАГРУЗКИ ИЗОБРАЖЕНИЙ <<<<< #
+	#==========================================================================================#
+
+	def __IsSlideLink(self, link: str, servers: list[str]) -> bool:
+		"""
+		Проверяет, ведёт ли ссылка на слайд.
+			link – ссылка на изображение;
+			servers – список серверов изображений.
+		"""
+
+		# Для каждого сервера.
+		for Server in servers:
+			# Если ссылка содержит домен сервера изображений, считать проверку успешной.
+			if Server in link: return True
+
+		return False
+	
+	def __ParseSlideLink(self, link: str, servers: list[str]) -> tuple[str]:
+		"""
+		Парсит ссылку на слайд.
+			link – ссылка на изображение;
+			servers – список серверов изображений.
+		"""
+
+		# Оригинальный сервер и URI слайда.
+		OriginalServer = None
+		URI = None
+
+		# Для каждого сервера.
+		for Server in servers:
+
+			# Если ссылка содержит домен сервера изображений.
+			if Server in link:
+				# Запись оригинального сервера и  получение URI.
+				OriginalServer = Server
+				URI = link.replace(OriginalServer, "")
+
+		return (OriginalServer, URI)
+
+	#==========================================================================================#
+	# >>>>> ПРИВАТНЫЕ МЕТОДЫ ПАРСИНГА <<<<< #
 	#==========================================================================================#
 
 	def __GetAgeLimit(self, data: dict) -> int:
@@ -220,7 +269,7 @@ class Parser:
 			# Парсинг данных в JSON.
 			Data = Response.json["data"]
 			# Выжидание интервала.
-			sleep(self.__Settings["common"]["delay"])
+			sleep(self.__Settings.common.delay)
 
 			# Для каждой главы.
 			for Chapter in Data:
@@ -269,7 +318,7 @@ class Parser:
 			})
 
 		# Если включен режим получения размеров обложек.
-		if self.__Settings["common"]["sizing_images"]:
+		if self.__Settings.common.sizing_images:
 			# Дополнение структуры размерами.
 			Covers[0]["width"] = None
 			Covers[0]["height"] = None
@@ -319,6 +368,51 @@ class Parser:
 
 		return Genres
 
+	def __GetImagesServers(self, server_id: str | None = None) -> list[str]:
+		"""
+		Возвращает один или несколько доменов серверов хранения изображений.
+			server_id – идентификатор сервера.
+		"""
+
+		# Список серверов.
+		Servers = list()
+		# ID текущего сайта.
+		CurrentSiteID = self.__GetSiteID()
+		# Адрес запроса.
+		URL = f"https://api.lib.social/api/constants?fields[]=imageServers"
+		# Заголовки запроса.
+		Headers = {
+			"Authorization": self.__Settings.custom["token"],
+			"Referer": f"https://{SITE}/"
+		}
+		# Запрос серверных констант.
+		Response = self.__Requestor.get(URL, headers = Headers)
+
+		# Если запрос успешен.
+		if Response.status_code == 200:
+			# Парсинг данных в JSON.
+			Data = Response.json["data"]["imageServers"]
+			# Выжидание интервала.
+			sleep(self.__Settings.common.delay)
+
+			# Для каждого сервера.
+			for ServerData in Data:
+
+				# Если задан ID сервера.
+				if server_id:
+					# Если сервер поддерживает текущий домен, записать его URL.
+					if ServerData["id"] == server_id and CurrentSiteID in ServerData["site_ids"]: Servers.append(ServerData["url"])
+
+				else:
+					# Если сервер поддерживает текущий домен, записать его URL.
+					if CurrentSiteID in ServerData["site_ids"]: Servers.append(ServerData["url"])
+
+		else:
+			# Запись в лог ошибки.
+			self.__SystemObjects.logger.request_error(Response, "Unable to request site constants.")
+
+		return Servers
+
 	def __GetSiteID(self) -> int:
 		"""Возвращает целочисленный идентификатор сайта."""
 
@@ -331,71 +425,36 @@ class Parser:
 		
 		return SiteID
 
-	def __GetServer(self) -> str:
-		"""Возвращает домен сервера хранения изображений."""
-
-		# Сервер.
-		Server = ""
-		# ID текущего сервера.
-		CurrentServerID = 4
-		# Адрес запроса.
-		URL = f"https://api.lib.social/api/constants?fields[]=imageServers"
-		# Заголовки запроса.
-		Headers = {
-			"Authorization": self.__Settings["custom"]["token"],
-			"Referer": f"https://{SITE}/"
-		}
-		# Запрос серверных констант.
-		Response = self.__Requestor.get(URL, headers = Headers)
-
-		# Если запрос успешен.
-		if Response.status_code == 200:
-			# Парсинг данных в JSON.
-			Data = Response.json["data"]["imageServers"]
-			# Выжидание интервала.
-			sleep(self.__Settings["common"]["delay"])
-
-			# Для каждого сервера.
-			for ServerData in Data:
-				# Если сервер поддерживает текущий домен, записать его URL.
-				if ServerData["id"] == self.__Settings["custom"]["server"] and CurrentServerID in ServerData["site_ids"]: Server = ServerData["url"]
-
-		else:
-			# Запись в лог ошибки.
-			self.__SystemObjects.logger.request_error(Response, "Unable to request site constants.")
-
-		return Server
-
 	def __GetSlides(self, number: str, volume: str, branch_id: str) -> list[dict]:
 		"""
 		Получает данные о слайдах главы.
-			number – номер главы;
-			volume – номер тома;
+			number – номер главы;\n
+			volume – номер тома;\n
 			branch_id – ID ветви.
 		"""
 
 		# Список слайдов.
 		Slides = list()
 		# Получение домена сервера хранения слайдов.
-		Server = self.__GetServer()
+		Server = self.__GetImagesServers(self.__Settings.custom["server"])[0]
 		# Модификатор запроса ветви.
 		Branch = "" if branch_id == str(self.__Title["id"]) + "0" else f"&branch_id={branch_id}"
 		# Адрес запроса.
 		URL = f"https://api.lib.social/api/manga/{self.__Slug}/chapter?number={number}&volume={volume}{Branch}"
 		# Заголовки запроса.
 		Headers = {
-			"Authorization": self.__Settings["custom"]["token"],
+			"Authorization": self.__Settings.custom["token"],
 			"Referer": f"https://{SITE}/"
 		}
 		# Запрос слайдов.
 		Response = self.__Requestor.get(URL, headers = Headers)
-
+		
 		# Если запрос успешен.
 		if Response.status_code == 200:
 			# Парсинг данных в JSON.
 			Data = Response.json["data"]["pages"]
 			# Выжидание интервала.
-			sleep(self.__Settings["common"]["delay"])
+			sleep(self.__Settings.common.delay)
 
 			# Для каждого слайда.
 			for SlideIndex in range(len(Data)):
@@ -406,7 +465,7 @@ class Parser:
 				}
 
 				# Если включен режим получения размеров обложек.
-				if self.__Settings["common"]["sizing_images"]:
+				if self.__Settings.common.sizing_images:
 					# Дополнение структуры размерами.
 					Buffer["width"] = Data[SlideIndex]["width"]
 					Buffer["height"] = Data[SlideIndex]["height"]
@@ -453,7 +512,7 @@ class Parser:
 		URL = f"https://api.lib.social/api/manga/{self.__Slug}?fields[]=eng_name&fields[]=otherNames&fields[]=summary&fields[]=releaseDate&fields[]=type_id&fields[]=caution&fields[]=genres&fields[]=tags&fields[]=franchise&fields[]=authors&fields[]=manga_status_id&fields[]=status_id"
 		# Заголовки запроса.
 		Headers = {
-			"Authorization": self.__Settings["custom"]["token"],
+			"Authorization": self.__Settings.custom["token"],
 			"Referer": f"https://{SITE}/"
 		}
 		# Выполнение запроса.
@@ -466,7 +525,7 @@ class Parser:
 			# Запись в лог информации: начало парсинга.
 			self.__SystemObjects.logger.parsing_start(self.__Slug, Response["id"])
 			# Выжидание интервала.
-			sleep(self.__Settings["common"]["delay"])
+			sleep(self.__Settings.common.delay)
 
 		else:
 			# Запись в лог ошибки.
@@ -528,16 +587,20 @@ class Parser:
 	# >>>>> ПУБЛИЧНЫЕ МЕТОДЫ <<<<< #
 	#==========================================================================================#
 
-	def __init__(self, system_objects: Objects):
+	def __init__(self, system_objects: Objects, settings: ParserSettings):
 		"""
 		Модульный парсер.
-			system_objects – коллекция системных объектов.
+			system_objects – коллекция системных объектов;\n
+			settings – настройки парсера.
 		"""
+
+		# Выбор парсера для системы логгирования.
+		system_objects.logger.select_parser(NAME)
 
 		#---> Генерация динамических свойств.
 		#==========================================================================================#
 		# Настройки парсера.
-		self.__Settings = ReadJSON(f"Parsers/{NAME}/settings.json")
+		self.__Settings = settings
 		# Менеджер WEB-запросов.
 		self.__Requestor = self.__InitializeRequestor()
 		# Структура данных.
@@ -547,13 +610,10 @@ class Parser:
 		# Коллекция системных объектов.
 		self.__SystemObjects = system_objects
 
-		# Выбор парсера для системы логгирования.
-		self.__SystemObjects.logger.select_parser(NAME)
-
 	def amend(self, content: dict | None = None, message: str = "") -> dict:
 		"""
 		Дополняет каждую главу в кажой ветви информацией о содержимом.
-			content – содержимое тайтла для дополнения;
+			content – содержимое тайтла для дополнения;\n
 			message – сообщение для портов CLI.
 		"""
 
@@ -595,14 +655,139 @@ class Parser:
 					# Вывод в консоль: прогресс дополнения.
 					PrintAmendingProgress(message, ProgressIndex, ChaptersToAmendCount)
 					# Выжидание интервала.
-					sleep(self.__Settings["common"]["delay"])
+					sleep(self.__Settings.common.delay)
 
 		# Запись в лог информации: количество дополненных глав.
 		self.__SystemObjects.logger.amending_end(self.__Slug, self.__Title["id"], AmendedChaptersCount)
 
 		return content
 
-	def get_updates(self, hours: int) -> list[str]:
+	def image(self, url: str) -> str | None:
+		"""
+		Скачивает изображение с сайта во временный каталог парсера и возвращает его название.
+			url – ссылка на изображение.
+		Возвращает название файла.
+		"""
+
+		# Инициализация загрузчика.
+		Config = WebConfig()
+		Config.select_lib(WebLibs.requests)
+		Config.requests.enable_proxy_protocol_switching(True)
+		WebRequestorObject = WebRequestor(Config)
+
+		# Установка прокси.
+		if self.__Settings.proxy.enable: WebRequestorObject.add_proxy(
+			Protocols.HTTP,
+			host = self.__Settings.proxy.host,
+			port = self.__Settings.proxy.port,
+			login = self.__Settings.proxy.login,
+			password = self.__Settings.proxy.password
+		)
+
+		# Загрузка изображения во временную директорию.
+		Result = Downloader(self.__SystemObjects, WebRequestorObject).temp_image(NAME, url, referer = SITE)
+		
+		# Если загрузка не удалась.
+		if Result.code not in Config.good_statusses:
+			# Получение списка доступных серверов.
+			Servers = self.__GetImagesServers()
+
+			# Если загружался слайд.
+			if self.__IsSlideLink(url, Servers):
+				# Оригинальный сервер и URI слайда.
+				OriginalServer, ImageURI = self.__ParseSlideLink(url, Servers)
+				# Удаление оригинального сервера из списка доступных.
+				Servers.remove(OriginalServer)
+				# Выжидание интервала.
+				sleep(self.__Settings.common.delay)
+
+				# Для каждого оставшегося сервера.
+				for Server in Servers:
+					# Составление новой ссылки.
+					Link = Server + ImageURI
+					# Загрузка изображения во временную директорию.
+					Result = Downloader(self.__SystemObjects, WebRequestorObject).temp_image(NAME, Link, referer = SITE)
+					
+					# Если запрос успешен.
+					if Result.code in Config.good_statusses:
+						# Прерывание цикла.
+						break
+
+					# Если попытка не последняя.
+					elif Server != Servers[-1]:
+						# Выжидание интервала.
+						sleep(self.__Settings.common.delay)
+
+		return Result.value
+
+	def parse(self, slug: str, message: str | None = None):
+		"""
+		Получает основные данные тайтла.
+			slug – алиас тайтла, использующийся для идентификации оного в адресе;\n
+			message – сообщение для портов CLI.
+		"""
+
+		# Преобразование сообщения в строку.
+		message = message or ""
+		# Заполнение базовых данных.
+		self.__Title = BaseStructs().manga
+		self.__Slug = slug
+		# Вывод в консоль: статус парсинга.
+		PrintParsingStatus(message)
+		# Получение описания.
+		Data = self.__GetTitleData()
+		# Занесение данных.
+		self.__Title["site"] = SITE.replace("test-front.", "")
+		self.__Title["id"] = Data["id"]
+		self.__Title["slug"] = slug
+		self.__Title["content_language"] = "rus"
+		self.__Title["localized_name"] = Data["rus_name"]
+		self.__Title["en_name"] = Data["eng_name"]
+		self.__Title["another_names"] = Data["otherNames"]
+		self.__Title["covers"] = self.__GetCovers(Data)
+		self.__Title["authors"] = self.__GetAuthors(Data)
+		self.__Title["publication_year"] = int(Data["releaseDate"]) if Data["releaseDate"] else None
+		self.__Title["description"] = self.__GetDescription(Data)
+		self.__Title["age_limit"] = self.__GetAgeLimit(Data)
+		self.__Title["type"] = self.__GetType(Data)
+		self.__Title["status"] = self.__GetStatus(Data)
+		self.__Title["is_licensed"] = Data["is_licensed"]
+		self.__Title["genres"] = self.__GetGenres(Data)
+		self.__Title["tags"] = self.__GetTags(Data)
+		self.__Title["franchises"] = self.__GetFranchises(Data)
+		self.__Title["content"] = self.__GetContent()
+		# Если главное название нигде не указано, добавить его в список альтернативных.
+		if Data["name"] not in self.__Title["another_names"] and Data["name"] != self.__Title["another_names"] and Data["name"] != self.__Title["another_names"]: self.__Title["another_names"].append(Data["name"])
+
+	def repair(self, content: dict, chapter_id: int) -> dict:
+		"""
+		Заново получает данные слайдов главы главы.
+			content – содержимое тайтла;\n
+			chapter_id – идентификатор главы.
+		"""
+
+		# Для каждой ветви.
+		for BranchID in content.keys():
+			
+			# Для каждый главы.
+			for ChapterIndex in range(len(content[BranchID])):
+				
+				# Если ID совпадает с искомым.
+				if content[BranchID][ChapterIndex]["id"] == chapter_id:
+					# Получение списка слайдов главы.
+					Slides = self.__GetSlides(
+						content[BranchID][ChapterIndex]["number"],
+						content[BranchID][ChapterIndex]["volume"],
+						BranchID
+					)
+					# Запись в лог информации: глава восстановлена.
+					self.__SystemObjects.logger.chapter_repaired(self.__Slug, self.__Title["id"], chapter_id, content[BranchID][ChapterIndex]["is_paid"])
+					# Запись восстановленной главы.
+					content[BranchID][ChapterIndex]["slides"] = Slides
+
+		return content
+	
+	def updates(self, hours: int) -> list[str]:
 		"""
 		Возвращает список алиасов тайтлов, обновлённых на сервере за указанный период времени.
 			hours – количество часов, составляющих период для получения обновлений.
@@ -610,8 +795,6 @@ class Parser:
 
 		# Список алиасов.
 		Updates = list()
-		# Промежуток времени для проверки обновлений (в секундах).
-		UpdatesPeriod = hours * 3600
 		# Состояние: достигнут ли конец проверяемого диапазона.
 		IsUpdatePeriodOut = False
 		# Счётчик страницы.
@@ -662,73 +845,9 @@ class Parser:
 				# Инкремент страницы.
 				Page += 1
 				# Выжидание указанного интервала.
-				sleep(self.__Settings["common"]["delay"])
+				sleep(self.__Settings.common.delay)
 
 		# Запись в лог информации: количество собранных обновлений.
 		self.__SystemObjects.logger.updates_collected(len(Updates))
 
 		return Updates
-
-	def parse(self, slug: str, message: str = ""):
-		"""
-		Получает основные данные тайтла.
-			slug – алиас тайтла, использующийся для идентификации оного в адресе;
-			message – сообщение для портов CLI.
-		"""
-
-		# Заполнение базовых данных.
-		self.__Title = BaseStructs().manga
-		self.__Slug = slug
-		# Вывод в консоль: статус парсинга.
-		PrintParsingStatus(message)
-		# Получение описания.
-		Data = self.__GetTitleData()
-		# Занесение данных.
-		self.__Title["site"] = SITE.replace("test-front.", "")
-		self.__Title["id"] = Data["id"]
-		self.__Title["slug"] = slug
-		self.__Title["ru_name"] = Data["rus_name"]
-		self.__Title["en_name"] = Data["eng_name"]
-		self.__Title["another_names"] = Data["otherNames"]
-		self.__Title["covers"] = self.__GetCovers(Data)
-		self.__Title["authors"] = self.__GetAuthors(Data)
-		self.__Title["publication_year"] = int(Data["releaseDate"]) if Data["releaseDate"] else None
-		self.__Title["description"] = self.__GetDescription(Data)
-		self.__Title["age_limit"] = self.__GetAgeLimit(Data)
-		self.__Title["type"] = self.__GetType(Data)
-		self.__Title["status"] = self.__GetStatus(Data)
-		self.__Title["is_licensed"] = Data["is_licensed"]
-		self.__Title["genres"] = self.__GetGenres(Data)
-		self.__Title["tags"] = self.__GetTags(Data)
-		self.__Title["franchises"] = self.__GetFranchises(Data)
-		self.__Title["content"] = self.__GetContent()
-		# Если главное название нигде не указано, добавить его в список альтернативных.
-		if Data["name"] not in self.__Title["another_names"] and Data["name"] != self.__Title["another_names"] and Data["name"] != self.__Title["another_names"]: self.__Title["another_names"].append(Data["name"])
-
-	def repair(self, content: dict, chapter_id: int) -> dict:
-		"""
-		Заново получает данные слайдов главы главы.
-			content – содержимое тайтла;
-			chapter_id – идентификатор главы.
-		"""
-
-		# Для каждой ветви.
-		for BranchID in content.keys():
-			
-			# Для каждый главы.
-			for ChapterIndex in range(len(content[BranchID])):
-				
-				# Если ID совпадает с искомым.
-				if content[BranchID][ChapterIndex]["id"] == chapter_id:
-					# Получение списка слайдов главы.
-					Slides = self.__GetSlides(
-						content[BranchID][ChapterIndex]["number"],
-						content[BranchID][ChapterIndex]["volume"],
-						BranchID
-					)
-					# Запись в лог информации: глава восстановлена.
-					self.__SystemObjects.logger.chapter_repaired(self.__Slug, self.__Title["id"], chapter_id, content[BranchID][ChapterIndex]["is_paid"])
-					# Запись восстановленной главы.
-					content[BranchID][ChapterIndex]["slides"] = Slides
-
-		return content
