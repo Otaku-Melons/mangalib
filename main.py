@@ -368,10 +368,11 @@ class Parser:
 
 		return Genres
 
-	def __GetImagesServers(self, server_id: str | None = None) -> list[str]:
+	def __GetImagesServers(self, server_id: str | None = None, all_sites: bool = False) -> list[str]:
 		"""
 		Возвращает один или несколько доменов серверов хранения изображений.
-			server_id – идентификатор сервера.
+			server_id – идентификатор сервера;\n
+			all_sites – указывает, что вернуть нужно домены хранилищ изображений для всех сайтов.
 		"""
 
 		# Список серверов.
@@ -402,10 +403,11 @@ class Parser:
 				if server_id:
 					# Если сервер поддерживает текущий домен, записать его URL.
 					if ServerData["id"] == server_id and CurrentSiteID in ServerData["site_ids"]: Servers.append(ServerData["url"])
+					elif ServerData["id"] == server_id and all_sites: Servers.append(ServerData["url"])
 
 				else:
 					# Если сервер поддерживает текущий домен, записать его URL.
-					if CurrentSiteID in ServerData["site_ids"]: Servers.append(ServerData["url"])
+					if CurrentSiteID in ServerData["site_ids"] or all_sites: Servers.append(ServerData["url"])
 
 		else:
 			# Запись в лог ошибки.
@@ -690,7 +692,7 @@ class Parser:
 		# Если загрузка не удалась.
 		if Result.code not in Config.good_statusses:
 			# Получение списка доступных серверов.
-			Servers = self.__GetImagesServers()
+			Servers = self.__GetImagesServers(all_sites = True)
 
 			# Если загружался слайд.
 			if self.__IsSlideLink(url, Servers):
