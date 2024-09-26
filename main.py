@@ -1,8 +1,7 @@
-from Source.Core.Formats.Manga import BaseStructs, Manga, Statuses, Types
-from Source.Core.ParserSettings import ParserSettings
-from Source.Core.Downloader import Downloader
-from Source.Core.Objects import Objects
-from Source.CLI.Templates import *
+from Source.Core.Formats.Manga import Branch, Chapter, Manga, Statuses, Types
+from Source.Core.ImagesDownloader import ImagesDownloader
+from Source.Core.Base.MangaParser import MangaParser
+from Source.Core.Exceptions import TitleNotFound
 
 from dublib.WebRequestor import Protocols, WebConfig, WebLibs, WebRequestor
 from dublib.Methods.Data import RemoveRecurringSubstrings, Zerotify
@@ -16,165 +15,35 @@ from time import sleep
 VERSION = "3.0.0"
 NAME = "mangalib"
 SITE = "test-front.mangalib.me"
-STRUCT = Manga()
+TYPE = Manga
 
 #==========================================================================================#
 # >>>>> ОСНОВНОЙ КЛАСС <<<<< #
 #==========================================================================================#
 
-class Parser:
-	"""Модульный парсер."""
+class Parser(MangaParser):
+	"""Парсер."""
 
 	#==========================================================================================#
-	# >>>>> СВОЙСТВА ТОЛЬКО ДЛЯ ЧТЕНИЯ <<<<< #
+	# >>>>> ПЕРЕОПРЕДЕЛЯЕМЫЕ МЕТОДЫ <<<<< #
 	#==========================================================================================#
 
-	@property
-	def site(self) -> str:
-		"""Домен целевого сайта."""
-
-		return self.__Title["site"]
-
-	@property
-	def id(self) -> int:
-		"""Целочисленный идентификатор."""
-
-		return self.__Title["id"]
-
-	@property
-	def slug(self) -> str:
-		"""Алиас."""
-
-		return self.__Title["slug"]
-
-	@property
-	def content_language(self) -> str | None:
-		"""Код языка контента по стандарту ISO 639-3."""
-
-		return self.__Title["content_language"]
-
-	@property
-	def localized_name(self) -> str | None:
-		"""Локализованное название."""
-
-		return self.__Title["localized_name"]
-
-	@property
-	def en_name(self) -> str | None:
-		"""Название на английском."""
-
-		return self.__Title["en_name"]
-
-	@property
-	def another_names(self) -> list[str]:
-		"""Список альтернативных названий."""
-
-		return self.__Title["another_names"]
-
-	@property
-	def covers(self) -> list[dict]:
-		"""Список описаний обложки."""
-
-		return self.__Title["covers"]
-
-	@property
-	def authors(self) -> list[str]:
-		"""Список авторов."""
-
-		return self.__Title["authors"]
-
-	@property
-	def publication_year(self) -> int | None:
-		"""Год публикации."""
-
-		return self.__Title["publication_year"]
-
-	@property
-	def description(self) -> str | None:
-		"""Описание."""
-
-		return self.__Title["description"]
-
-	@property
-	def age_limit(self) -> int | None:
-		"""Возрастное ограничение."""
-
-		return self.__Title["age_limit"]
-
-	@property
-	def genres(self) -> list[str]:
-		"""Список жанров."""
-
-		return self.__Title["genres"]
-
-	@property
-	def tags(self) -> list[str]:
-		"""Список тегов."""
-
-		return self.__Title["tags"]
-
-	@property
-	def franchises(self) -> list[str]:
-		"""Список франшиз."""
-
-		return self.__Title["franchises"]
-
-	@property
-	def type(self) -> Types | None:
-		"""Тип тайтла."""
-
-		return self.__Title["type"]
-
-	@property
-	def status(self) -> Statuses | None:
-		"""Статус тайтла."""
-
-		return self.__Title["status"]
-
-	@property
-	def is_licensed(self) -> bool | None:
-		"""Состояние: лицензирован ли тайтл на данном ресурсе."""
-
-		return self.__Title["is_licensed"]
-
-	@property
-	def content(self) -> dict:
-		"""Содержимое тайтла."""
-
-		return self.__Title["content"]
-
-	#==========================================================================================#
-	# >>>>> СТАНДАРТНЫЕ ПРИВАТНЫЕ МЕТОДЫ <<<<< #
-	#==========================================================================================#
-
-	def __CalculateEmptyChapters(self, content: dict) -> int:
-		"""Подсчитывает количество глав без слайдов."""
-
-		ChaptersCount = 0
-
-		for BranchID in content.keys():
-
-			for Chapter in content[BranchID]:
-				if not Chapter["slides"]: ChaptersCount += 1
-
-		return ChaptersCount
-
-	def __InitializeRequestor(self) -> WebRequestor:
+	def _InitializeRequestor(self) -> WebRequestor:
 		"""Инициализирует модуль WEB-запросов."""
 
 		Config = WebConfig()
 		Config.select_lib(WebLibs.requests)
 		Config.generate_user_agent("pc")
-		Config.set_retries_count(self.__Settings.common.retries)
-		Config.add_header("Authorization", self.__Settings.custom["token"])
+		Config.set_retries_count(self._Settings.common.retries)
+		Config.add_header("Authorization", self._Settings.custom["token"])
 		WebRequestorObject = WebRequestor(Config)
 		
-		if self.__Settings.proxy.enable: WebRequestorObject.add_proxy(
+		if self._Settings.proxy.enable: WebRequestorObject.add_proxy(
 			Protocols.HTTP,
-			host = self.__Settings.proxy.host,
-			port = self.__Settings.proxy.port,
-			login = self.__Settings.proxy.login,
-			password = self.__Settings.proxy.password
+			host = self._Settings.proxy.host,
+			port = self._Settings.proxy.port,
+			login = self._Settings.proxy.login,
+			password = self._Settings.proxy.password
 		)
 
 		return WebRequestorObject
@@ -237,38 +106,41 @@ class Parser:
 
 		return Authors
 
-	def __GetContent(self) -> dict:
+	def __GetBranches(self) -> list[Branch]:
 		"""Получает содержимое тайтла."""
 
-		Content = dict()
-		Response = self.__Requestor.get(f"https://api.lib.social/api/manga/{self.__Slug}/chapters")
+		Branches = dict()
+		Response = self._Requestor.get(f"https://api.lib.social/api/manga/{self._Title.slug}/chapters")
 		
 		if Response.status_code == 200:
 			Data = Response.json["data"]
-			sleep(self.__Settings.common.delay)
+			sleep(self._Settings.common.delay)
 
-			for Chapter in Data:
+			for CurrentChapterData in Data:
 
-				for BranchData in Chapter["branches"]:
-					BranchID = str(BranchData["branch_id"])
-					if BranchID == "None": BranchID = str(self.__Title["id"]) + "0"
-					if BranchID not in Content.keys(): Content[BranchID] = list()
+				for BranchData in CurrentChapterData["branches"]:
+					BranchID = BranchData["branch_id"]
+					if BranchID == None: BranchID = int(str(self._Title.id) + "0")
+					if BranchID not in Branches.keys(): Branches[BranchID] = Branch(BranchID)
+
 					Translators = [sub["name"] for sub in BranchData["teams"]]
 					Buffer = {
 						"id": BranchData["id"],
-						"volume": Chapter["volume"],
-						"number": Chapter["number"],
-						"name": Zerotify(Chapter["name"]),
+						"volume": CurrentChapterData["volume"],
+						"number": CurrentChapterData["number"],
+						"name": Zerotify(CurrentChapterData["name"]),
 						"is_paid": False,
 						"translators": Translators,
 						"slides": []	
 					}
-					Content[BranchID].append(Buffer)
 
-		else:
-			self.__SystemObjects.logger.request_error(Response, "Unable to request chapter.")
+					ChapterObject = Chapter(self._SystemObjects)
+					ChapterObject.set_dict(Buffer)
+					Branches[BranchID].add_chapter(ChapterObject)
 
-		return Content
+		else: self._SystemObjects.logger.request_error(Response, "Unable to request chapter.")
+
+		for CurrentBranch in Branches.values(): self._Title.add_branch(CurrentBranch)
 
 	def __GetCovers(self, data: dict) -> list[str]:
 		"""Получает список обложек."""
@@ -281,7 +153,7 @@ class Parser:
 				"filename": data["cover"]["default"].split("/")[-1]
 			})
 
-		if self.__Settings.common.sizing_images:
+		if self._Settings.common.sizing_images:
 			Covers[0]["width"] = None
 			Covers[0]["height"] = None
 
@@ -333,14 +205,14 @@ class Parser:
 		CurrentSiteID = self.__GetSiteID()
 		URL = f"https://api.lib.social/api/constants?fields[]=imageServers"
 		Headers = {
-			"Authorization": self.__Settings.custom["token"],
+			"Authorization": self._Settings.custom["token"],
 			"Referer": f"https://{SITE}/"
 		}
-		Response = self.__Requestor.get(URL, headers = Headers)
+		Response = self._Requestor.get(URL, headers = Headers)
 
 		if Response.status_code == 200:
 			Data = Response.json["data"]["imageServers"]
-			sleep(self.__Settings.common.delay)
+			sleep(self._Settings.common.delay)
 
 			for ServerData in Data:
 
@@ -352,7 +224,7 @@ class Parser:
 					if CurrentSiteID in ServerData["site_ids"] or all_sites: Servers.append(ServerData["url"])
 
 		else:
-			self.__SystemObjects.logger.request_error(Response, "Unable to request site constants.")
+			self._SystemObjects.logger.request_error(Response, "Unable to request site constants.")
 
 		return Servers
 
@@ -366,42 +238,37 @@ class Parser:
 		
 		return SiteID
 
-	def __GetSlides(self, number: str, volume: str, branch_id: str) -> list[dict]:
+	def __GetSlides(self, branch_id: int, chapter: Chapter) -> list[dict]:
 		"""
 		Получает данные о слайдах главы.
-			number – номер главы;\n
-			volume – номер тома;\n
-			branch_id – ID ветви.
+			branch_id – идентификатор ветви;\n
+			chapter – данные главы.
 		"""
 
 		Slides = list()
-		Server = self.__GetImagesServers(self.__Settings.custom["server"])[0]
-		Branch = "" if branch_id == str(self.__Title["id"]) + "0" else f"&branch_id={branch_id}"
-		URL = f"https://api.lib.social/api/manga/{self.__Slug}/chapter?number={number}&volume={volume}{Branch}"
+		Server = self.__GetImagesServers(self._Settings.custom["server"])[0]
+		Branch = "" if branch_id == str(self._Title.id) + "0" else f"&branch_id={branch_id}"
+		URL = f"https://api.lib.social/api/manga/{self._Title.slug}/chapter?number={chapter.number}&volume={chapter.volume}{Branch}"
 		Headers = {
-			"Authorization": self.__Settings.custom["token"],
+			"Authorization": self._Settings.custom["token"],
 			"Referer": f"https://{SITE}/"
 		}
-		Response = self.__Requestor.get(URL, headers = Headers)
+		Response = self._Requestor.get(URL, headers = Headers)
 		
 		if Response.status_code == 200:
 			Data = Response.json["data"]["pages"]
-			sleep(self.__Settings.common.delay)
+			sleep(self._Settings.common.delay)
 
 			for SlideIndex in range(len(Data)):
 				Buffer = {
 					"index": SlideIndex + 1,
-					"link": Server + Data[SlideIndex]["url"].replace(" ", "%20")
+					"link": Server + Data[SlideIndex]["url"].replace(" ", "%20"),
+					"width": Data[SlideIndex]["width"],
+					"height": Data[SlideIndex]["height"]
 				}
-
-				if self.__Settings.common.sizing_images:
-					Buffer["width"] = Data[SlideIndex]["width"]
-					Buffer["height"] = Data[SlideIndex]["height"]
-
 				Slides.append(Buffer)
 
-		else:
-			self.__SystemObjects.logger.request_error(Response, "Unable to request chapter content.")
+		else: self._SystemObjects.logger.request_error(Response, "Unable to request chapter content.")
 
 		return Slides
 
@@ -430,20 +297,21 @@ class Parser:
 			slug – алиас.
 		"""
 
-		URL = f"https://api.lib.social/api/manga/{self.__Slug}?fields[]=eng_name&fields[]=otherNames&fields[]=summary&fields[]=releaseDate&fields[]=type_id&fields[]=caution&fields[]=genres&fields[]=tags&fields[]=franchise&fields[]=authors&fields[]=manga_status_id&fields[]=status_id"
+		URL = f"https://api.lib.social/api/manga/{self._Title.slug}?fields[]=eng_name&fields[]=otherNames&fields[]=summary&fields[]=releaseDate&fields[]=type_id&fields[]=caution&fields[]=genres&fields[]=tags&fields[]=franchise&fields[]=authors&fields[]=manga_status_id&fields[]=status_id"
 		Headers = {
-			"Authorization": self.__Settings.custom["token"],
+			"Authorization": self._Settings.custom["token"],
 			"Referer": f"https://{SITE}/"
 		}
-		Response = self.__Requestor.get(URL, headers = Headers)
+		Response = self._Requestor.get(URL, headers = Headers)
 
 		if Response.status_code == 200:
 			Response = Response.json["data"]
-			self.__SystemObjects.logger.parsing_start(self.__Slug, Response["id"])
-			sleep(self.__Settings.common.delay)
+			self._Title.set_id(Response["id"])
+			self._SystemObjects.logger.parsing_start(self._Title)
+			sleep(self._Settings.common.delay)
 
 		else:
-			self.__SystemObjects.logger.request_error(Response, "Unable to request title data.")
+			self._SystemObjects.logger.request_error(Response, "Unable to request title data.")
 			Response = None
 
 		return Response
@@ -493,156 +361,16 @@ class Parser:
 	# >>>>> ПУБЛИЧНЫЕ МЕТОДЫ <<<<< #
 	#==========================================================================================#
 
-	def __init__(self, system_objects: Objects, settings: ParserSettings):
+	def amend(self, branch: Branch, chapter: Chapter):
 		"""
-		Модульный парсер.
-			system_objects – коллекция системных объектов;\n
-			settings – настройки парсера.
-		"""
-
-		system_objects.logger.select_parser(NAME)
-
-		#---> Генерация динамических свойств.
-		#==========================================================================================#
-		self.__Settings = settings
-		self.__Requestor = self.__InitializeRequestor()
-		self.__Title = None
-		self.__Slug = None
-		self.__SystemObjects = system_objects
-
-	def amend(self, content: dict | None = None, message: str = "") -> dict:
-		"""
-		Дополняет каждую главу в кажой ветви информацией о содержимом.
-			content – содержимое тайтла для дополнения;\n
-			message – сообщение для портов CLI.
+		Дополняет главу дайными о слайдах.
+			branch – данные ветви;\n
+			chapter – данные главы.
 		"""
 
-		if content == None: content = self.content
-		ChaptersToAmendCount = self.__CalculateEmptyChapters(content)
-		AmendedChaptersCount = 0
-		ProgressIndex = 0
+		Slides = self.__GetSlides(branch.id, chapter)
+		for Slide in Slides: chapter.add_slide(Slide["link"], Slide["width"], Slide["height"])
 
-		for BranchID in content.keys():
-			
-			for ChapterIndex in range(0, len(content[BranchID])):
-				
-				if content[BranchID][ChapterIndex]["slides"] == []:
-					ProgressIndex += 1
-					Slides = self.__GetSlides(
-						content[BranchID][ChapterIndex]["number"],
-						content[BranchID][ChapterIndex]["volume"],
-						BranchID
-					)
-
-					if Slides:
-						AmendedChaptersCount += 1
-						content[BranchID][ChapterIndex]["slides"] = Slides
-						self.__SystemObjects.logger.chapter_amended(self.__Slug, self.__Title["id"], content[BranchID][ChapterIndex]["id"], False)
-
-					PrintAmendingProgress(message, ProgressIndex, ChaptersToAmendCount)
-					sleep(self.__Settings.common.delay)
-
-		self.__SystemObjects.logger.amending_end(self.__Slug, self.__Title["id"], AmendedChaptersCount)
-
-		return content
-
-	def image(self, url: str) -> str | None:
-		"""
-		Скачивает изображение с сайта во временный каталог парсера и возвращает его название.
-			url – ссылка на изображение.
-		Возвращает название файла.
-		"""
-
-		Config = WebConfig()
-		Config.select_lib(WebLibs.requests)
-		Config.requests.enable_proxy_protocol_switching(True)
-		WebRequestorObject = WebRequestor(Config)
-
-		if self.__Settings.proxy.enable: WebRequestorObject.add_proxy(
-			Protocols.HTTP,
-			host = self.__Settings.proxy.host,
-			port = self.__Settings.proxy.port,
-			login = self.__Settings.proxy.login,
-			password = self.__Settings.proxy.password
-		)
-
-		Result = Downloader(self.__SystemObjects, WebRequestorObject).temp_image(NAME, url, referer = SITE)
-		
-		if Result.code not in Config.good_statusses:
-			Servers = self.__GetImagesServers(all_sites = True)
-
-			if self.__IsSlideLink(url, Servers):
-				OriginalServer, ImageURI = self.__ParseSlideLink(url, Servers)
-				Servers.remove(OriginalServer)
-				sleep(self.__Settings.common.delay)
-
-				for Server in Servers:
-					Link = Server + ImageURI
-					Result = Downloader(self.__SystemObjects, WebRequestorObject).temp_image(NAME, Link, referer = SITE)
-					
-					if Result.code in Config.good_statusses:
-						break
-
-					elif Server != Servers[-1]:
-						sleep(self.__Settings.common.delay)
-
-		return Result.value
-
-	def parse(self, slug: str, message: str | None = None):
-		"""
-		Получает основные данные тайтла.
-			slug – алиас тайтла, использующийся для идентификации оного в адресе;\n
-			message – сообщение для портов CLI.
-		"""
-
-		message = message or ""
-		self.__Title = BaseStructs().manga
-		self.__Slug = slug
-		PrintParsingStatus(message)
-		Data = self.__GetTitleData()
-		self.__Title["site"] = SITE.replace("test-front.", "")
-		self.__Title["id"] = Data["id"]
-		self.__Title["slug"] = slug
-		self.__Title["content_language"] = "rus"
-		self.__Title["localized_name"] = Data["rus_name"]
-		self.__Title["en_name"] = Data["eng_name"]
-		self.__Title["another_names"] = Data["otherNames"]
-		self.__Title["covers"] = self.__GetCovers(Data)
-		self.__Title["authors"] = self.__GetAuthors(Data)
-		self.__Title["publication_year"] = int(Data["releaseDate"]) if Data["releaseDate"] else None
-		self.__Title["description"] = self.__GetDescription(Data)
-		self.__Title["age_limit"] = self.__GetAgeLimit(Data)
-		self.__Title["type"] = self.__GetType(Data)
-		self.__Title["status"] = self.__GetStatus(Data)
-		self.__Title["is_licensed"] = Data["is_licensed"]
-		self.__Title["genres"] = self.__GetGenres(Data)
-		self.__Title["tags"] = self.__GetTags(Data)
-		self.__Title["franchises"] = self.__GetFranchises(Data)
-		self.__Title["content"] = self.__GetContent()
-		if Data["name"] not in self.__Title["another_names"] and Data["name"] != self.__Title["another_names"] and Data["name"] != self.__Title["another_names"]: self.__Title["another_names"].append(Data["name"])
-
-	def repair(self, content: dict, chapter_id: int) -> dict:
-		"""
-		Заново получает данные слайдов главы главы.
-			content – содержимое тайтла;\n
-			chapter_id – идентификатор главы.
-		"""
-
-		for BranchID in content.keys():
-			
-			for ChapterIndex in range(len(content[BranchID])):
-				
-				if content[BranchID][ChapterIndex]["id"] == chapter_id:
-					Slides = self.__GetSlides(
-						content[BranchID][ChapterIndex]["number"],
-						content[BranchID][ChapterIndex]["volume"],
-						BranchID
-					)
-					self.__SystemObjects.logger.chapter_repaired(self.__Slug, self.__Title["id"], chapter_id, content[BranchID][ChapterIndex]["is_paid"])
-					content[BranchID][ChapterIndex]["slides"] = Slides
-
-		return content
-	
 	def collect(self, period: int | None = None, filters: str | None = None, pages: int | None = None) -> list[str]:
 		"""
 		Собирает список тайтлов по заданным параметрам.
@@ -651,8 +379,8 @@ class Parser:
 			pages – количество запрашиваемых страниц.
 		"""
 
-		if filters: self.__SystemObjects.logger.collect_filters_ignored()
-		if pages: self.__SystemObjects.logger.collect_pages_ignored()
+		if filters: self._SystemObjects.logger.collect_filters_ignored()
+		if pages: self._SystemObjects.logger.collect_pages_ignored()
 
 		Updates = list()
 		IsUpdatePeriodOut = False
@@ -664,7 +392,7 @@ class Parser:
 		CurrentDate = datetime.utcnow()
 
 		while not IsUpdatePeriodOut:
-			Response = self.__Requestor.get(f"https://api.lib.social/api/latest-updates?page={Page}", headers = Headers)
+			Response = self._Requestor.get(f"https://api.lib.social/api/latest-updates?page={Page}", headers = Headers)
 			
 			if Response.status_code == 200:
 				UpdatesPage = Response.json["data"]
@@ -681,12 +409,80 @@ class Parser:
 
 			else:
 				IsUpdatePeriodOut = True
-				self.__SystemObjects.logger.request_error(Response, f"Unable to request updates page {Page}.")
+				self._SystemObjects.logger.request_error(Response, f"Unable to request updates page {Page}.")
 
 			if not IsUpdatePeriodOut:
 				Page += 1
-				sleep(self.__Settings.common.delay)
+				sleep(self._Settings.common.delay)
 
-		self.__SystemObjects.logger.updates_collected(len(Updates))
+		self._SystemObjects.logger.titles_collected(len(Updates))
 
 		return Updates
+
+	def image(self, url: str) -> str | None:
+		"""
+		Скачивает изображение с сайта во временный каталог парсера и возвращает его название.
+			url – ссылка на изображение.
+		"""
+
+		Config = WebConfig()
+		Config.select_lib(WebLibs.requests)
+		Config.requests.enable_proxy_protocol_switching(True)
+		Config.add_header("Referer", f"https://{SITE}/")
+		WebRequestorObject = WebRequestor(Config)
+
+		if self._Settings.proxy.enable: WebRequestorObject.add_proxy(
+			Protocols.HTTPS,
+			host = self._Settings.proxy.host,
+			port = self._Settings.proxy.port,
+			login = self._Settings.proxy.login,
+			password = self._Settings.proxy.password
+		)
+
+		Result = ImagesDownloader(self._SystemObjects, WebRequestorObject).temp_image(url)
+		
+		if not Result:
+			Servers = self.__GetImagesServers(all_sites = True)
+
+			if self.__IsSlideLink(url, Servers):
+				OriginalServer, ImageURI = self.__ParseSlideLink(url, Servers)
+				Servers.remove(OriginalServer)
+				sleep(self._Settings.common.delay)
+
+				for Server in Servers:
+					Link = Server + ImageURI
+					Result = ImagesDownloader(self._SystemObjects, WebRequestorObject).temp_image(Link)
+					
+					if Result: break
+					elif Server != Servers[-1]: sleep(self._Settings.common.delay)
+
+		return Result
+
+	def parse(self):
+		"""Получает основные данные тайтла."""
+
+		Data = self.__GetTitleData()
+			
+		if Data:
+
+			self._Title.set_site(SITE)
+			self._Title.set_id(Data["id"])
+			self._Title.set_slug(Data["slug"])
+			self._Title.set_content_language("rus")
+			self._Title.set_localized_name(Data["rus_name"])
+			self._Title.set_eng_name(Data["eng_name"])
+			self._Title.set_another_names(Data["otherNames"])
+			if Data["name"] not in Data["otherNames"] and Data["name"] != Data["rus_name"] and Data["name"] != Data["eng_name"]: self._Title.add_another_name(Data["name"])
+			self._Title.set_covers(self.__GetCovers(Data))
+			self._Title.set_authors(self.__GetAuthors(Data))
+			self._Title.set_publication_year(int(Data["releaseDate"]) if Data["releaseDate"] else None)
+			self._Title.set_description(self.__GetDescription(Data))
+			self._Title.set_age_limit(self.__GetAgeLimit(Data))
+			self._Title.set_type(self.__GetType(Data))
+			self._Title.set_status(self.__GetStatus(Data))
+			self._Title.set_is_licensed(Data["is_licensed"])
+			self._Title.set_genres(self.__GetGenres(Data))
+			self._Title.set_tags(self.__GetTags(Data))
+			self._Title.set_franchises(self.__GetFranchises(Data))
+
+			self.__GetBranches()

@@ -4,6 +4,7 @@
 		"archives_directory": "",
 		"covers_directory": "",
 		"titles_directory": "",
+		"bad_images_stub": "",
 		"use_id_as_filename": false,
 		"sizing_images": false,
 		"legacy": false,
