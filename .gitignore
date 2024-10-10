@@ -1,6 +1,2 @@
 # Python cache.
 __pycache__
-# Logger settings.
-logger.json
-# Titles collection.
-Collection.txt

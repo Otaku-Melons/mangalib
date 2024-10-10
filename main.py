@@ -310,9 +310,8 @@ class Parser(MangaParser):
 			self._SystemObjects.logger.parsing_start(self._Title)
 			sleep(self._Settings.common.delay)
 
-		else:
-			self._SystemObjects.logger.request_error(Response, "Unable to request title data.")
-			Response = None
+		elif Response.status_code == 451: self._SystemObjects.logger.request_error(Response, "Account banned.", exception = True)
+		else: self._SystemObjects.logger.request_error(Response, "Unable to request title data.", exception = True)
 
 		return Response
 
