@@ -1,7 +1,6 @@
 from Source.Core.Formats.Manga import Branch, Chapter, Manga, Statuses, Types
 from Source.Core.ImagesDownloader import ImagesDownloader
 from Source.Core.Base.MangaParser import MangaParser
-from Source.Core.Exceptions import TitleNotFound
 
 from dublib.WebRequestor import Protocols, WebConfig, WebLibs, WebRequestor
 from dublib.Methods.Data import RemoveRecurringSubstrings, Zerotify
@@ -33,13 +32,15 @@ class Parser(MangaParser):
 
 		Config = WebConfig()
 		Config.select_lib(WebLibs.requests)
+		Config.requests.enable_proxy_protocol_switching(True)
 		Config.generate_user_agent("pc")
 		Config.set_retries_count(self._Settings.common.retries)
-		Config.add_header("Authorization", self._Settings.custom["token"])
+		Config.add_header("Referer", f"https://{SITE}/")
+		if self._Settings.custom["token"]: Config.add_header("Authorization", self._Settings.custom["token"])
 		WebRequestorObject = WebRequestor(Config)
 		
 		if self._Settings.proxy.enable: WebRequestorObject.add_proxy(
-			Protocols.HTTP,
+			Protocols.HTTPS,
 			host = self._Settings.proxy.host,
 			port = self._Settings.proxy.port,
 			login = self._Settings.proxy.login,
@@ -47,6 +48,17 @@ class Parser(MangaParser):
 		)
 
 		return WebRequestorObject
+	
+	def _PostInitMethod(self):
+		"""Метод, выполняющийся после инициализации объекта."""
+
+		self.__TitleSlug = None
+
+		self.__Sites = {
+			"mangalib.me": 1,
+			"slashlib.me": 2,
+			"hentailib.me": 4
+		}
 
 	#==========================================================================================#
 	# >>>>> ПРИВАТНЫЕ МЕТОДЫ ЗАГРУЗКИ ИЗОБРАЖЕНИЙ <<<<< #
@@ -86,6 +98,22 @@ class Parser(MangaParser):
 	# >>>>> ПРИВАТНЫЕ МЕТОДЫ ПАРСИНГА <<<<< #
 	#==========================================================================================#
 
+	def __CheckCorrectDomain(self, data: dict) -> str:
+		"""
+		Получает возрастной рейтинг.
+			data – словарь данных тайтла.
+		"""
+
+		Domain = SITE
+
+		if self._Title.site:
+
+			if data["site"] != self.__GetSiteID(self._Title.site):
+				Domain = self.__GetSiteDomain(data["site"])
+				self._Portals.warning(f"Title site changed to \"{Domain}\".")
+
+		return Domain 
+
 	def __GetAgeLimit(self, data: dict) -> int:
 		"""
 		Получает возрастной рейтинг.
@@ -109,8 +137,8 @@ class Parser(MangaParser):
 	def __GetBranches(self) -> list[Branch]:
 		"""Получает содержимое тайтла."""
 
-		Branches = dict()
-		Response = self._Requestor.get(f"https://api.lib.social/api/manga/{self._Title.slug}/chapters")
+		Branches: dict[int, Branch] = dict()
+		Response = self._Requestor.get(f"https://api.lib.social/api/manga/{self.__TitleSlug}/chapters")
 		
 		if Response.status_code == 200:
 			Data = Response.json["data"]
@@ -123,22 +151,18 @@ class Parser(MangaParser):
 					if BranchID == None: BranchID = int(str(self._Title.id) + "0")
 					if BranchID not in Branches.keys(): Branches[BranchID] = Branch(BranchID)
 
-					Translators = [sub["name"] for sub in BranchData["teams"]]
-					Buffer = {
-						"id": BranchData["id"],
-						"volume": CurrentChapterData["volume"],
-						"number": CurrentChapterData["number"],
-						"name": Zerotify(CurrentChapterData["name"]),
-						"is_paid": False,
-						"translators": Translators,
-						"slides": []	
-					}
-
 					ChapterObject = Chapter(self._SystemObjects)
-					ChapterObject.set_dict(Buffer)
+					ChapterObject.set_id(BranchData["id"])
+					ChapterObject.set_volume(CurrentChapterData["volume"])
+					ChapterObject.set_number(CurrentChapterData["number"])
+					ChapterObject.set_name(CurrentChapterData["name"])
+					ChapterObject.set_is_paid(False)
+					ChapterObject.set_translators([sub["name"] for sub in BranchData["teams"]])
+					ChapterObject.add_extra_data("moderated", False if "moderation" in BranchData.keys() else True)
+
 					Branches[BranchID].add_chapter(ChapterObject)
 
-		else: self._SystemObjects.logger.request_error(Response, "Unable to request chapter.")
+		else: self._Portals.request_error(Response, "Unable to request chapter.", exception = False)
 
 		for CurrentBranch in Branches.values(): self._Title.add_branch(CurrentBranch)
 
@@ -224,17 +248,34 @@ class Parser(MangaParser):
 					if CurrentSiteID in ServerData["site_ids"] or all_sites: Servers.append(ServerData["url"])
 
 		else:
-			self._SystemObjects.logger.request_error(Response, "Unable to request site constants.")
+			self._Portals.request_error(Response, "Unable to request site constants.")
 
 		return Servers
 
-	def __GetSiteID(self) -> int:
-		"""Возвращает целочисленный идентификатор сайта."""
+	def __GetSiteDomain(self, id: str) -> int | None:
+		"""
+		Возвращает домен сайта.
+			id – целочисленный идентификатор сайта.
+		"""
 
+		SiteDomain = None
+
+		for Domain, ID in self.__Sites.items():
+			if ID == id: SiteDomain = Domain
+		
+		return SiteDomain
+
+	def __GetSiteID(self, site: str = None) -> int | None:
+		"""
+		Возвращает целочисленный идентификатор сайта.
+			site – домен сайта (по умолчанию используемый парсером).
+		"""
+
+		if not site: site = SITE
 		SiteID = None
-		if "mangalib" in SITE: SiteID = 1
-		if "yaoilib" in SITE or "slashlib" in SITE: SiteID = 2
-		if "hentailib" in SITE: SiteID = 4
+
+		for Domain in self.__Sites.keys():
+			if Domain in site: SiteID = self.__Sites[Domain]
 		
 		return SiteID
 
@@ -246,14 +287,15 @@ class Parser(MangaParser):
 		"""
 
 		Slides = list()
+
+		if not chapter["moderated"]:
+			self._Portals.chapter_skipped(self._Title, chapter, comment = "Not moderated.")
+			return Slides
+		
 		Server = self.__GetImagesServers(self._Settings.custom["server"])[0]
 		Branch = "" if branch_id == str(self._Title.id) + "0" else f"&branch_id={branch_id}"
-		URL = f"https://api.lib.social/api/manga/{self._Title.slug}/chapter?number={chapter.number}&volume={chapter.volume}{Branch}"
-		Headers = {
-			"Authorization": self._Settings.custom["token"],
-			"Referer": f"https://{SITE}/"
-		}
-		Response = self._Requestor.get(URL, headers = Headers)
+		URL = f"https://api.lib.social/api/manga/{self.__TitleSlug}/chapter?number={chapter.number}&volume={chapter.volume}{Branch}"
+		Response = self._Requestor.get(URL)
 		
 		if Response.status_code == 200:
 			Data = Response.json["data"]["pages"]
@@ -268,7 +310,7 @@ class Parser(MangaParser):
 				}
 				Slides.append(Buffer)
 
-		else: self._SystemObjects.logger.request_error(Response, "Unable to request chapter content.")
+		else: self._Portals.request_error(Response, "Unable to request chapter content.", exception = False)
 
 		return Slides
 
@@ -296,8 +338,8 @@ class Parser(MangaParser):
 		Получает данные тайтла.
 			slug – алиас.
 		"""
-
-		URL = f"https://api.lib.social/api/manga/{self._Title.slug}?fields[]=eng_name&fields[]=otherNames&fields[]=summary&fields[]=releaseDate&fields[]=type_id&fields[]=caution&fields[]=genres&fields[]=tags&fields[]=franchise&fields[]=authors&fields[]=manga_status_id&fields[]=status_id"
+		
+		URL = f"https://api.lib.social/api/manga/{self.__TitleSlug}?fields[]=eng_name&fields[]=otherNames&fields[]=summary&fields[]=releaseDate&fields[]=type_id&fields[]=caution&fields[]=genres&fields[]=tags&fields[]=franchise&fields[]=authors&fields[]=manga_status_id&fields[]=status_id"
 		Headers = {
 			"Authorization": self._Settings.custom["token"],
 			"Referer": f"https://{SITE}/"
@@ -306,12 +348,11 @@ class Parser(MangaParser):
 
 		if Response.status_code == 200:
 			Response = Response.json["data"]
-			self._Title.set_id(Response["id"])
-			self._SystemObjects.logger.parsing_start(self._Title)
 			sleep(self._Settings.common.delay)
 
-		elif Response.status_code == 451: self._SystemObjects.logger.request_error(Response, "Account banned.", exception = True)
-		else: self._SystemObjects.logger.request_error(Response, "Unable to request title data.", exception = True)
+		elif Response.status_code == 451: self._Portals.request_error(Response, "Account banned.")
+		elif Response.status_code == 404: self._Portals.title_not_found(self._Title)
+		else: self._Portals.request_error(Response, "Unable to request title data.")
 
 		return Response
 
@@ -368,18 +409,16 @@ class Parser(MangaParser):
 		"""
 
 		Slides = self.__GetSlides(branch.id, chapter)
+		if not self._Settings.custom["add_moderation_status"]: chapter.remove_extra_data("moderated")
 		for Slide in Slides: chapter.add_slide(Slide["link"], Slide["width"], Slide["height"])
 
 	def collect(self, period: int | None = None, filters: str | None = None, pages: int | None = None) -> list[str]:
 		"""
 		Собирает список тайтлов по заданным параметрам.
 			period – количество часов до текущего момента, составляющее период получения данных;\n
-			filters – строка из URI каталога, описывающая параметры запроса;\n
-			pages – количество запрашиваемых страниц.
+			filters – строка, описывающая фильтрацию (подробнее в README.md);\n
+			pages – количество запрашиваемых страниц каталога.
 		"""
-
-		if filters: self._SystemObjects.logger.collect_filters_ignored()
-		if pages: self._SystemObjects.logger.collect_pages_ignored()
 
 		Updates = list()
 		IsUpdatePeriodOut = False
@@ -392,7 +431,7 @@ class Parser(MangaParser):
 
 		while not IsUpdatePeriodOut:
 			Response = self._Requestor.get(f"https://api.lib.social/api/latest-updates?page={Page}", headers = Headers)
-			
+
 			if Response.status_code == 200:
 				UpdatesPage = Response.json["data"]
 
@@ -400,7 +439,7 @@ class Parser(MangaParser):
 					Delta = CurrentDate - self.__StringToDate(UpdateNote["last_item_at"])
 					
 					if Delta.total_seconds() / 3600 <= period:
-						Updates.append(UpdateNote["slug"])
+						Updates.append(UpdateNote["slug_url"])
 						UpdatesCount += 1
 
 					else:
@@ -408,19 +447,18 @@ class Parser(MangaParser):
 
 			else:
 				IsUpdatePeriodOut = True
-				self._SystemObjects.logger.request_error(Response, f"Unable to request updates page {Page}.")
+				self._Portals.request_error(Response, f"Unable to request updates page {Page}.")
 
 			if not IsUpdatePeriodOut:
+				self._Portals.collect_progress_by_page(Page)
 				Page += 1
 				sleep(self._Settings.common.delay)
-
-		self._SystemObjects.logger.titles_collected(len(Updates))
 
 		return Updates
 
 	def image(self, url: str) -> str | None:
 		"""
-		Скачивает изображение с сайта во временный каталог парсера и возвращает его название.
+		Скачивает изображение с сайта во временный каталог парсера и возвращает имя файла.
 			url – ссылка на изображение.
 		"""
 
@@ -460,11 +498,14 @@ class Parser(MangaParser):
 	def parse(self):
 		"""Получает основные данные тайтла."""
 
-		Data = self.__GetTitleData()
-			
-		if Data:
+		if self._Title.id and self._Title.slug: self.__TitleSlug = f"{self._Title.id}--{self._Title.slug}"
+		else: self.__TitleSlug = self._Title.slug
 
-			self._Title.set_site(SITE)
+		Data = self.__GetTitleData()
+		self._SystemObjects.manager.get_parser_settings()
+
+		if Data:
+			self._Title.set_site(self.__CheckCorrectDomain(Data))
 			self._Title.set_id(Data["id"])
 			self._Title.set_slug(Data["slug"])
 			self._Title.set_content_language("rus")

@@ -7,7 +7,6 @@
 		"pretty": false,
 		"use_id_as_filename": false,
 		"sizing_images": false,
-		"legacy": false,
 		"retries": 1,
 		"delay": 1
 	},
@@ -29,6 +28,7 @@
 	},
 	"custom": {
 		"token": "",
-		"server": "main"
+		"server": "main",
+		"add_moderation_status": false
 	}
 }

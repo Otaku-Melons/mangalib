@@ -1,11 +1,8 @@
 # mangalib
-**mangalib** – это модуль системы управления парсерами [Melon](https://github.com/DUB1401/Melon), включающий поддержку источника: [MangaLib](https://test-front.mangalib.me/).
+**mangalib** – это модуль системы управления парсерами [Melon](https://github.com/Otaku-Melons/Melon), включающий поддержку источников: [MangaLib](https://test-front.mangalib.me/), [HentaiLib](https://hentailib.me/), [SlashLib](https://slashlib.me/).
 
-## Порядок установки и использования
-Все парсеры от [@DUB1401](https://github.com/DUB1401) поставляются в Melon по умолчанию. Для повторной загрузки файлов или обновления модуля используйте встроенную команду `install`.
-
-# settings.json
-Данный раздел описывает специфичные для этого модуля настройки.
+# Дополнительные настройки
+Данный раздел описывает специфичные для этого парсера настройки.
 ___
 ```JSON
 "token": ""
@@ -18,3 +15,8 @@ ___
 Идентификатор сервера хранения изображений. 
 
 Принимаемые значения: _main_, _secondary_, _compress_, _download_, _crop_.
+___
+```JSON
+"add_moderation_status": false
+```
+Указывает, необходимо ли добавлять статус модерации главы в данные о ней.
