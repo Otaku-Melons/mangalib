@@ -40,7 +40,7 @@ class Parser(MangaParser):
 		WebRequestorObject = WebRequestor(Config)
 		
 		if self._Settings.proxy.enable: WebRequestorObject.add_proxy(
-			Protocols.HTTPS,
+			Protocols.HTTP,
 			host = self._Settings.proxy.host,
 			port = self._Settings.proxy.port,
 			login = self._Settings.proxy.login,
@@ -465,11 +465,13 @@ class Parser(MangaParser):
 		Config = WebConfig()
 		Config.select_lib(WebLibs.requests)
 		Config.requests.enable_proxy_protocol_switching(True)
+		Config.generate_user_agent("pc")
+		Config.set_retries_count(self._Settings.common.retries)
 		Config.add_header("Referer", f"https://{SITE}/")
 		WebRequestorObject = WebRequestor(Config)
 
 		if self._Settings.proxy.enable: WebRequestorObject.add_proxy(
-			Protocols.HTTPS,
+			Protocols.HTTP,
 			host = self._Settings.proxy.host,
 			port = self._Settings.proxy.port,
 			login = self._Settings.proxy.login,
