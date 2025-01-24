@@ -1,9 +1,11 @@
 from Source.Core.Formats.Manga import Branch, Chapter, Manga, Statuses, Types
 from Source.Core.ImagesDownloader import ImagesDownloader
 from Source.Core.Base.MangaParser import MangaParser
+from Source.Core.Base import GetLatestGitTag
 
 from dublib.WebRequestor import Protocols, WebConfig, WebLibs, WebRequestor
 from dublib.Methods.Data import RemoveRecurringSubstrings, Zerotify
+
 from datetime import datetime
 from time import sleep
 
@@ -11,8 +13,8 @@ from time import sleep
 # >>>>> ОПРЕДЕЛЕНИЯ <<<<< #
 #==========================================================================================#
 
-VERSION = "3.0.0"
 NAME = "mangalib"
+VERSION = GetLatestGitTag(NAME)
 SITE = "test-front.mangalib.me"
 TYPE = Manga
 
