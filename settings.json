@@ -1,7 +1,7 @@
 {
 	"common": {
 		"archives_directory": "",
-		"covers_directory": "",
+		"images_directory": "",
 		"titles_directory": "",
 		"bad_image_stub": "",
 		"pretty": false,
